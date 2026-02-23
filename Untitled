@@ -1,0 +1,29 @@
+--- More details at https://bit.ly/pio-monitor-filters
+--- Quit: Ctrl+C | Menu: Ctrl+T | Help: Ctrl+T followed by Ctrl+H
+14:32:49.829 > ets Jul 29 2019 12:21:46
+14:32:49.832 > 
+14:32:49.832 > rst:0x1 (POWERON_RESET),boot:0x13 (SPI_FAST_FLASH_BOOT)
+14:32:49.837 > configsip: 0, SPIWP:0xee
+14:32:49.839 > clk_drv:0x00,q_drv:0x00,d_drv:0x00,cs0_drv:0x00,hd_drv:0x00,wp_drv:0x00
+14:32:49.846 > mode:DIO, clock div:2
+14:32:49.848 > load:0x3fff0030,len:1184
+14:32:49.850 > load:0x40078000,len:13232
+14:32:49.852 > load:0x40080400,len:3028
+14:32:49.854 > entry 0x400805e4
+14:32:51.329 > 
+14:32:51.329 > ========================================
+14:32:51.333 > Smart Plant Pro – ESP RainMaker
+14:32:51.336 > ========================================
+14:32:51.339 > 
+14:32:51.530 > BMP280 not found at 0x77. Check wiring.
+14:33:04.816 > E (14204) wifi_prov_scheme_ble: bt_mem_release of classic BT failed 259
+14:33:04.905 > E (14293) simple_ble: simple_ble_start enable controller failed 259
+14:33:04.911 > E (14294) protocomm_ble: simple_ble_start failed w/ error code 0x103
+14:33:04.917 > E (14295) wifi_prov_scheme_ble: Failed to start protocomm BLE service
+14:33:04.924 > E (14301) wifi_prov_mgr: Failed to start service
+14:33:04.928 > [ 14311][E][WiFiProv.cpp:151] beginProvision(): wifi_prov_mgr_start_provisioning failed!
+14:33:04.936 > Setup complete. If not provisioned, scan QR code in Serial Monitor.
+14:33:04.941 > 
+14:33:04.941 > Temp: N/A °C  Light: Bright  Soil: 162  Pump: OFF
+14:33:09.938 > Temp: N/A °C  Light: Bright  Soil: 0  Pump: OFF
+14:33:14.939 > Temp: N/A °C  Light: Bright  Soil: 0  Pump: OFF

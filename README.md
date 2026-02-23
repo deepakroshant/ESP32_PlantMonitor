@@ -177,9 +177,43 @@ npm run build
 
 Output is in `frontend/dist/`. Serve with any static host or Firebase Hosting.
 
+### Deploy to Vercel (no localhost)
+
+1. **Push your project to GitHub** (if not already), including the `frontend/` folder.
+
+2. **Go to [vercel.com](https://vercel.com)** → Sign in → **Add New** → **Project** → Import your repo.
+
+3. **Configure the project**:
+   - **Root Directory**: set to `frontend` (so Vercel builds from that folder).
+   - **Build Command**: `npm run build` (default).
+   - **Output Directory**: `dist` (Vite default).
+   - **Install Command**: `npm install` (default).
+
+4. **Environment variables** (Vercel → Project → Settings → Environment Variables). Add these for **Production** (and Preview if you want):
+   - `VITE_FIREBASE_API_KEY`
+   - `VITE_FIREBASE_AUTH_DOMAIN`
+   - `VITE_FIREBASE_DATABASE_URL`
+   - `VITE_FIREBASE_PROJECT_ID`
+   - `VITE_FIREBASE_APP_ID`  
+   Use the same values as in your `frontend/.env.local`. Vercel will inject them at build time.
+
+5. **Deploy**: Click **Deploy**. Vercel will build and give you a URL (e.g. `https://your-project.vercel.app`). All routes (`/`, `/login`, `/claim`) work because `frontend/vercel.json` rewrites them to `index.html`.
+
+**Optional**: Connect a custom domain in Vercel → Project → Settings → Domains.
+
 ---
 
-## 8. Security note
+## 8. Next steps (improvements & capstone)
+
+- **Calibration wizard**: UI to set “bone dry” and “submerged” soil values; store in `devices/<MAC>/calibration` and optionally use them to map raw → percentage in the dashboard.
+- **Plant profiles**: Dropdown (e.g. Cactus, Monstera, Fern) that sets a suggested `targetSoil` (or presets) per device.
+- **Manual pump toggle**: Button in the dashboard to set `devices/<MAC>/control/pumpRequest` to `true` for on-demand watering (when you have relay hardware).
+- **Stricter Firebase rules**: When you lock down auth, restrict RTDB so users can only read/write their own `users/<uid>/devices` and the corresponding `devices/<MAC>` nodes (e.g. by checking `auth.uid` and a `users/<uid>/devices/<MAC>` claim).
+- **Deploy frontend**: `npm run build` in `frontend/`, then deploy `frontend/dist/` to Firebase Hosting or another static host and point your domain at it.
+
+---
+
+## 9. Security note
 
 Do **not** commit real Wi‑Fi passwords or Firebase credentials to a public repo. For team projects, move secrets into a private `include/secrets.h` (gitignored) or CI secrets.
 # Plant-Monitor
