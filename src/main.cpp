@@ -268,6 +268,11 @@ void taskFirebaseSync(void *pv) {
         Serial.print("RTDB update failed: ");
         Serial.println(fbClient.errorReason());
       }
+      // So the app can list "available" devices and show online status
+      String deviceListPath = "deviceList/" + deviceId + "/lastSeen";
+      if (!Firebase.RTDB.setInt(&fbClient, deviceListPath.c_str(), (int)(millis() / 1000))) {
+        // non-fatal
+      }
       xSemaphoreGive(gFirebaseMutex);
     }
 

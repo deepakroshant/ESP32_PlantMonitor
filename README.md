@@ -83,6 +83,10 @@ devices/<MAC_ADDRESS>/
     boneDry: number
     submerged: number
 users/<uid>/devices/<MAC_ADDRESS>: true
+users/<uid>/invites/<key>: { email: string, at: number }   # Invite list (web app)
+deviceList/<MAC_ADDRESS>/
+  lastSeen: number    # Updated by ESP32 on each sync (for “Discover devices”)
+  claimedBy: uid      # Set by web app when user claims; unclaimed if absent
 ```
 
 To test quickly, create these defaults in RTDB for your device:

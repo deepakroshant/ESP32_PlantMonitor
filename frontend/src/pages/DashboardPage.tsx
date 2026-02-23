@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ref, onValue, set } from 'firebase/database'
+import { ref, onValue, set, get } from 'firebase/database'
 import { firebaseDb } from '../lib/firebase'
 import { useAuth } from '../context/AuthContext'
 import { soilStatus, soilStatusLabel, soilStatusBadgeClass, soilRawToGauge } from '../utils/soil'
@@ -25,6 +25,10 @@ export function DashboardPage() {
   const [readings, setReadings] = useState<Readings | null>(null)
   const [targetSoil, setTargetSoil] = useState<number>(2800)
   const [targetSoilInput, setTargetSoilInput] = useState('2800')
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [invitedList, setInvitedList] = useState<string[]>([])
+  const [copyOk, setCopyOk] = useState(false)
+  const appUrl = typeof window !== 'undefined' ? window.location.origin : ''
 
   // Load user's claimed devices
   useEffect(() => {
@@ -70,12 +74,49 @@ export function DashboardPage() {
     return () => unsub()
   }, [selectedMac])
 
+  // Invited users list (users/<uid>/invites)
+  useEffect(() => {
+    if (!user) return
+    const invitesRef = ref(firebaseDb, `users/${user.uid}/invites`)
+    const unsub = onValue(invitesRef, (snap) => {
+      const val = snap.val()
+      if (!val || typeof val !== 'object') {
+        setInvitedList([])
+        return
+      }
+      const emails = (Object.values(val) as { email?: string }[])
+        .map((v) => v.email)
+        .filter((e): e is string => typeof e === 'string')
+      setInvitedList(emails)
+    })
+    return () => unsub()
+  }, [user])
+
   function handleSaveTarget() {
     const n = parseInt(targetSoilInput, 10)
     if (isNaN(n) || n < 0) return
     const path = `devices/${selectedMac}/control/targetSoil`
     set(ref(firebaseDb, path), n).catch(console.error)
     setTargetSoil(n)
+  }
+
+  async function handleCopyUrl() {
+    try {
+      await navigator.clipboard.writeText(appUrl)
+      setCopyOk(true)
+      setTimeout(() => setCopyOk(false), 2000)
+    } catch {
+      setCopyOk(false)
+    }
+  }
+
+  async function handleInvite(e: React.FormEvent) {
+    e.preventDefault()
+    const email = inviteEmail.trim().toLowerCase()
+    if (!email || !user) return
+    const key = email.replace(/[.#$[\]]/g, '_')
+    await set(ref(firebaseDb, `users/${user.uid}/invites/${key}`), { email, at: Date.now() }).catch(console.error)
+    setInviteEmail('')
   }
 
   const soil = readings?.soilRaw != null ? soilStatus(readings.soilRaw) : null
@@ -255,6 +296,51 @@ export function DashboardPage() {
             </div>
           </>
         )}
+
+        {/* Invite user section */}
+        <section className="mt-10 rounded-2xl border border-slate-700/80 bg-slate-900/60 p-5 shadow-sm">
+          <h2 className="mb-1 text-sm font-medium uppercase tracking-wider text-slate-500">
+            Invite user
+          </h2>
+          <p className="mb-3 text-sm text-slate-400">
+            Share the app link. New users sign up with email and password, then can claim their own devices.
+          </p>
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              readOnly
+              value={appUrl}
+              className="flex-1 min-w-0 rounded-xl border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-300"
+            />
+            <button
+              type="button"
+              onClick={handleCopyUrl}
+              className="rounded-xl border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700"
+            >
+              {copyOk ? 'Copied!' : 'Copy link'}
+            </button>
+          </div>
+          <form onSubmit={handleInvite} className="mb-3 flex flex-wrap items-center gap-2">
+            <input
+              type="email"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder="Email to add to invite list"
+              className="rounded-xl border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            />
+            <button
+              type="submit"
+              className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500"
+            >
+              Add to invite list
+            </button>
+          </form>
+          {invitedList.length > 0 && (
+            <p className="text-xs text-slate-500">
+              Invited: {invitedList.join(', ')} (they still need to sign up at the link above).
+            </p>
+          )}
+        </section>
       </div>
     </div>
   )
