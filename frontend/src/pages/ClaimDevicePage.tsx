@@ -91,9 +91,13 @@ export function ClaimDevicePage() {
           </button>
         </header>
 
-        {/* Discover devices */}
-        <section className="mb-8 rounded-2xl border border-slate-700/80 bg-slate-900/60 p-5 shadow-sm">
-          <h2 className="mb-1 text-sm font-medium uppercase tracking-wider text-slate-500">
+        {/* Discover devices - always at top so it's visible */}
+        <section
+          id="discover-devices"
+          className="mb-8 min-h-[120px] rounded-2xl border border-slate-700/80 bg-slate-900/60 p-5 shadow-sm"
+          aria-label="Discover devices"
+        >
+          <h2 className="mb-1 text-base font-semibold text-slate-200">
             Discover devices
           </h2>
           <p className="mb-4 text-sm text-slate-400">
@@ -101,7 +105,7 @@ export function ClaimDevicePage() {
           </p>
           {devices.length === 0 ? (
             <p className="rounded-xl border border-slate-700/80 bg-slate-800/40 p-4 text-center text-sm text-slate-500">
-              No devices seen yet. Power on an ESP32 and wait for it to sync, or enter a MAC below.
+              No devices seen yet. Power on an ESP32 with updated firmware and wait for it to sync, or enter a MAC in the form below.
             </p>
           ) : (
             <ul className="space-y-2">
