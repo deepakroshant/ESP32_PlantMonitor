@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ref, onValue, set, get } from 'firebase/database'
+import { ref, onValue, set } from 'firebase/database'
 import { firebaseDb } from '../lib/firebase'
 import { useAuth } from '../context/AuthContext'
 import { soilStatus, soilStatusLabel, soilStatusBadgeClass, soilRawToGauge } from '../utils/soil'

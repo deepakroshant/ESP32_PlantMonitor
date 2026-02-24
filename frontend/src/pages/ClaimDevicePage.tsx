@@ -29,7 +29,6 @@ export function ClaimDevicePage() {
         setDevices([])
         return
       }
-      const nowSec = Math.floor(Date.now() / 1000)
       const list: DeviceEntry[] = Object.entries(val).map(([macKey, data]) => {
         const d = data as { lastSeen?: number; claimedBy?: string | null }
         return {
