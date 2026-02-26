@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import type { DeviceStatus, Readings } from '../../types'
 import type { StatusMeta } from '../../utils/deviceStatus'
-import { fadeSlideUp } from '../../lib/motion'
+import { spring } from '../../lib/motion'
 
 type Props = {
   devices: string[]
@@ -23,9 +23,9 @@ export function DeviceStatusBar({
 }: Props) {
   return (
     <motion.div
-      variants={fadeSlideUp}
-      initial="hidden"
-      animate="visible"
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={spring.gentle}
       className={`mb-5 rounded-3xl border ${meta.border} ${meta.bg} p-4 transition-colors duration-500 sm:p-5`}
       style={{ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
     >

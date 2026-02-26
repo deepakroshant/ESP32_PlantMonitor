@@ -40,7 +40,7 @@ export const fade: Variants = {
   exit:    { opacity: 0 },
 }
 
-// Stagger container — wraps a list of cardItem children
+// Orchestrated stagger — GSAP timeline-like sequential reveal
 export const staggerContainer: Variants = {
   hidden:  {},
   visible: {
@@ -48,17 +48,42 @@ export const staggerContainer: Variants = {
   },
 }
 
-// Individual card inside a stagger container
+export const orchestratedStagger: Variants = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.12, delayChildren: 0.06 },
+  },
+}
+
 export const cardItem: Variants = {
   hidden:  { opacity: 0, y: 18 },
   visible: { opacity: 1, y: 0, transition: spring.gentle },
 }
 
-// Slide in from left (for banners / status)
 export const slideInLeft: Variants = {
   hidden:  { opacity: 0, x: -12 },
   visible: { opacity: 1, x: 0, transition: spring.snappy },
   exit:    { opacity: 0, x: -8, transition: { duration: 0.15 } },
+}
+
+// Accordion / collapsible content
+export const accordionContent: Variants = {
+  collapsed: {
+    height: 0,
+    opacity: 0,
+    transition: { height: { duration: 0.28, ease: [0.25, 0.46, 0.45, 0.94] }, opacity: { duration: 0.18 } },
+  },
+  expanded: {
+    height: 'auto',
+    opacity: 1,
+    transition: { height: { duration: 0.32, ease: [0.25, 0.46, 0.45, 0.94] }, opacity: { duration: 0.25, delay: 0.06 } },
+  },
+}
+
+// Scroll-triggered reveal (for whileInView usage)
+export const scrollReveal: Variants = {
+  hidden:  { opacity: 0, y: 24 },
+  visible: { opacity: 1, y: 0, transition: { ...spring.smooth, delay: 0.05 } },
 }
 
 export const pageWrap = {

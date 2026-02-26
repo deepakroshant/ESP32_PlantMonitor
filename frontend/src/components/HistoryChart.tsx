@@ -105,8 +105,14 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
     return (
       <div className="section-card mt-5">
         <p className="stat-label mb-3">Readings history</p>
-        <div className="flex h-48 items-center justify-center">
-          <span className="text-sm text-forest/35">Loading history…</span>
+        <div className="h-48 space-y-3 overflow-hidden">
+          {[72, 88, 60, 80, 56].map((w, i) => (
+            <div
+              key={i}
+              className="h-3 animate-pulse rounded-md bg-forest/[0.04]"
+              style={{ width: `${w}%`, animationDelay: `${i * 120}ms` }}
+            />
+          ))}
         </div>
       </div>
     )
@@ -251,7 +257,7 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
               <Line yAxisId="temp" type="monotone" dataKey="temperature" stroke="#F59E0B" strokeWidth={2} dot={false} activeDot={{ r: 3, fill: '#F59E0B' }} connectNulls />
             )}
             {visibleSeries.soilRaw && (
-              <Line yAxisId="soil" type="monotone" dataKey="soilRaw" stroke="#22C55E" strokeWidth={2} dot={false} activeDot={{ r: 3, fill: '#22C55E' }} />
+              <Line yAxisId="soil" type="monotone" dataKey="soilRaw" stroke="#3B7A57" strokeWidth={2} dot={false} activeDot={{ r: 3, fill: '#3B7A57' }} />
             )}
             {hasPressure && visibleSeries.pressure && (
               <Line yAxisId="pressure" type="monotone" dataKey="pressure" stroke="#6366F1" strokeWidth={1.5} dot={false} activeDot={{ r: 3, fill: '#6366F1' }} connectNulls />

@@ -2,7 +2,7 @@ import { motion } from 'framer-motion'
 import type { DeviceStatus } from '../../types'
 import { PlantIcon } from '../icons/PlantIcon'
 import { PencilIcon } from '../icons/PencilIcon'
-import { fadeSlideUp } from '../../lib/motion'
+import { spring } from '../../lib/motion'
 
 type Props = {
   selectedMac: string
@@ -40,9 +40,10 @@ export function PlantHero({
   return (
     <motion.div
       key={selectedMac}
-      variants={fadeSlideUp}
-      initial="hidden"
-      animate="visible"
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={spring.gentle}
+      whileHover={{ scale: 1.005 }}
       className="section-card mb-5 flex items-center gap-4 !p-5 sm:gap-6 sm:!p-6"
     >
       {/* Plant icon */}

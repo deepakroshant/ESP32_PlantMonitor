@@ -3,7 +3,7 @@ import type { DeviceStatus, Readings } from '../../types'
 import { CircularGauge } from '../CircularGauge'
 import { ThermometerIcon } from '../icons/ThermometerIcon'
 import { SunIcon } from '../icons/SunIcon'
-import { staggerContainer, cardItem } from '../../lib/motion'
+import { staggerContainer, cardItem, spring } from '../../lib/motion'
 
 type Props = {
   deviceStatus: DeviceStatus
@@ -95,7 +95,8 @@ export function SensorGrid({
         {/* Temperature */}
         <motion.div
           variants={cardItem}
-          whileHover={dataUntrusted ? {} : { y: -2 }}
+          whileHover={dataUntrusted ? {} : { y: -3, scale: 1.01 }}
+          transition={spring.snappy}
           className="sensor-card relative overflow-hidden"
         >
           {isLive && <LiveDot />}
@@ -114,7 +115,8 @@ export function SensorGrid({
         {/* Light */}
         <motion.div
           variants={cardItem}
-          whileHover={dataUntrusted ? {} : { y: -2 }}
+          whileHover={dataUntrusted ? {} : { y: -3, scale: 1.01 }}
+          transition={spring.snappy}
           className="sensor-card relative overflow-hidden"
         >
           {isLive && <LiveDot />}
@@ -130,7 +132,8 @@ export function SensorGrid({
         {/* Soil moisture — full width */}
         <motion.div
           variants={cardItem}
-          whileHover={dataUntrusted ? {} : { y: -2 }}
+          whileHover={dataUntrusted ? {} : { y: -3, scale: 1.005 }}
+          transition={spring.snappy}
           className="sensor-card relative overflow-hidden sm:col-span-2"
         >
           {isLive && <LiveDot />}
@@ -142,7 +145,8 @@ export function SensorGrid({
         {hasPressure && (
           <motion.div
             variants={cardItem}
-            whileHover={dataUntrusted ? {} : { y: -2 }}
+            whileHover={dataUntrusted ? {} : { y: -3, scale: 1.01 }}
+            transition={spring.snappy}
             className="sensor-card relative overflow-hidden"
           >
             {isLive && <LiveDot />}
@@ -161,7 +165,8 @@ export function SensorGrid({
         {hasHumidity && (
           <motion.div
             variants={cardItem}
-            whileHover={dataUntrusted ? {} : { y: -2 }}
+            whileHover={dataUntrusted ? {} : { y: -3, scale: 1.01 }}
+            transition={spring.snappy}
             className="sensor-card relative overflow-hidden"
           >
             {isLive && <LiveDot />}
