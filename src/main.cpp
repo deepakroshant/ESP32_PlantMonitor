@@ -261,10 +261,13 @@ void setup() {
   wm.addParameter(&p_fb_pw);
   wm.addParameter(&p_fb_close);
 
-  wm.setConnectRetries(2);
-  wm.setConnectTimeout(10);
+  wm.setAPStaticIPConfig(IPAddress(192,168,4,1), IPAddress(192,168,4,1), IPAddress(255,255,255,0));
+  wm.setWiFiAPChannel(1);
+  wm.setConnectRetries(1);
+  wm.setConnectTimeout(5);
   wm.setSaveConnectTimeout(10);
   wm.setConfigPortalTimeout(0);
+  wm.setCaptivePortalEnable(true);
 
   if (!wm.autoConnect("SmartPlantPro")) {
     Serial.println("WiFiManager failed to connect, restarting...");
