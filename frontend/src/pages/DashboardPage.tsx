@@ -364,16 +364,15 @@ export function DashboardPage() {
   }, [gaugePct])
   const showProTip = temp != null && !Number.isNaN(temp) && temp > 28
   const healthOk = (readings?.health ?? '').toLowerCase() === 'ok'
-  const lastUpdated = readings?.timestamp != null && tsLooksValid
-    ? new Date(readings.timestamp * 1000).toLocaleTimeString()
-    : null
   const nowSec = Math.floor(Date.now() / 1000)
   const lastSeenSec = readings?.timestamp ?? 0
-  // Guard: if the stored timestamp looks like uptime (< year-2020 epoch) treat as unknown
-  const tsLooksValid = lastSeenSec > 1577836800 // > 2020-01-01
+  const tsLooksValid = lastSeenSec > 1577836800
   const secondsAgo = tsLooksValid ? nowSec - lastSeenSec : Infinity
   const isStale = secondsAgo > 30
   const isOffline = secondsAgo > 120
+  const lastUpdated = readings?.timestamp != null && tsLooksValid
+    ? new Date(readings.timestamp * 1000).toLocaleTimeString()
+    : null
   const lastSeenLabel =
     !tsLooksValid
       ? 'unknown'
