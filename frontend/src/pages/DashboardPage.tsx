@@ -446,7 +446,7 @@ export function DashboardPage() {
   // Tick every 5s so offline/stale detection stays current even without new data
   const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000))
   useEffect(() => {
-    const id = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 5000)
+    const id = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 2000)
     return () => clearInterval(id)
   }, [])
 
@@ -455,8 +455,8 @@ export function DashboardPage() {
   const lastSeenSec = readings?.timestamp ?? 0
   const tsLooksValid = lastSeenSec > 1577836800
   const secondsAgo = tsLooksValid ? nowSec - lastSeenSec : Infinity
-  const isStale = secondsAgo > 20
-  const isOffline = secondsAgo > 60
+  const isStale = secondsAgo > 12
+  const isOffline = secondsAgo > 30
   const lastUpdated = readings?.timestamp != null && tsLooksValid
     ? new Date(readings.timestamp * 1000).toLocaleTimeString()
     : null

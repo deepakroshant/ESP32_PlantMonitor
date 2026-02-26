@@ -42,8 +42,8 @@ const char *FIREBASE_USER_PASSWORD = "123456";
 // -----------------------------------------------------------------------------
 // Timing and defaults
 // -----------------------------------------------------------------------------
-static constexpr uint32_t SENSOR_READ_INTERVAL_MS   = 5000;   // 5 s
-static constexpr uint32_t FIREBASE_SYNC_INTERVAL_MS = 10000;  // 10 s
+static constexpr uint32_t SENSOR_READ_INTERVAL_MS   = 2000;   // 2 s
+static constexpr uint32_t FIREBASE_SYNC_INTERVAL_MS = 3000;   // 3 s
 static constexpr TickType_t PUMP_PULSE_MS  = pdMS_TO_TICKS(1000);
 static constexpr TickType_t PUMP_SOAK_MS   = pdMS_TO_TICKS(5000);
 static constexpr TickType_t PUMP_IDLE_MS   = pdMS_TO_TICKS(500);
@@ -471,9 +471,9 @@ void taskFirebaseSync(void *pv) {
         Firebase.RTDB.updateNode(&fbClient, alertPath.c_str(), &alertJson);
       }
 
-      // History: push a compact snapshot every ~5 min (30 cycles × 10 s)
+      // History: push a compact snapshot every ~5 min (100 cycles × 3 s)
       static int histCycles = 0;
-      if (++histCycles >= 30) {
+      if (++histCycles >= 100) {
         histCycles = 0;
         String histPath = "devices/" + deviceId + "/history/" + String((int)time(nullptr));
         FirebaseJson hj;
