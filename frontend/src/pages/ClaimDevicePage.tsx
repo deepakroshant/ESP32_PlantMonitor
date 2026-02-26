@@ -77,14 +77,14 @@ export function ClaimDevicePage() {
   const nowSec = Math.floor(Date.now() / 1000)
 
   return (
-    <div className="min-h-screen bg-slate-950 p-4 md:p-6">
+    <div className="min-h-screen bg-surface p-4 md:p-6">
       <div className="mx-auto max-w-2xl">
-        <header className="mb-6 flex items-center justify-between border-b border-slate-700/80 pb-4">
-          <h1 className="text-xl font-semibold text-slate-100">Claim device</h1>
+        <header className="mb-6 flex items-center justify-between border-b border-forest/10 pb-4">
+          <h1 className="text-xl font-bold tracking-tight text-forest">Claim device</h1>
           <button
             type="button"
             onClick={() => navigate('/')}
-            className="rounded-lg border border-slate-600 bg-slate-800/80 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700"
+            className="rounded-full border border-forest/10 bg-white px-4 py-2 text-sm font-medium text-forest shadow-card transition hover:bg-mint/50"
           >
             Dashboard
           </button>
@@ -93,17 +93,17 @@ export function ClaimDevicePage() {
         {/* Discover devices - always at top so it's visible */}
         <section
           id="discover-devices"
-          className="mb-8 min-h-[120px] rounded-2xl border border-slate-700/80 bg-slate-900/60 p-5 shadow-sm"
+          className="mb-8 min-h-[120px] rounded-[32px] bg-white p-5 shadow-card"
           aria-label="Discover devices"
         >
-          <h2 className="mb-1 text-base font-semibold text-slate-200">
+          <h2 className="mb-1 text-base font-semibold text-forest">
             Discover devices
           </h2>
-          <p className="mb-4 text-sm text-slate-400">
+          <p className="mb-4 text-sm text-forest/70">
             Devices that have recently synced appear here. Online = seen in the last 2 minutes. Claim only available devices.
           </p>
           {devices.length === 0 ? (
-            <p className="rounded-xl border border-slate-700/80 bg-slate-800/40 p-4 text-center text-sm text-slate-500">
+            <p className="rounded-2xl border border-forest/10 bg-mint/30 p-4 text-center text-sm text-forest/70">
               No devices seen yet. Power on an ESP32 with updated firmware and wait for it to sync, or enter a MAC in the form below.
             </p>
           ) : (
@@ -118,35 +118,35 @@ export function ClaimDevicePage() {
                 return (
                   <li
                     key={d.mac}
-                    className={`flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-700/80 bg-slate-800/60 px-4 py-3 ${
+                    className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-forest/10 bg-mint/20 px-4 py-3 transition hover:bg-mint/30 ${
                       greyedOut ? 'opacity-60' : ''
                     }`}
                   >
                     <div className="flex items-center gap-3">
                       <span
                         className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                          isOnline ? 'bg-emerald-500' : 'bg-slate-500'
+                          isOnline ? 'bg-primary' : 'bg-forest/30'
                         }`}
                         title={isOnline ? 'Online' : 'Offline'}
                       />
-                      <span className="font-mono text-sm text-slate-200">{d.mac}</span>
-                      <span className="text-xs text-slate-500">
+                      <span className="font-mono text-sm text-forest">{d.mac}</span>
+                      <span className="text-xs text-forest/60">
                         {isOnline ? 'Online' : 'Offline'}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
                       {isAvailable && (
-                        <span className="rounded-full border border-emerald-500/40 bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-300">
+                        <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                           Available
                         </span>
                       )}
                       {isYours && (
-                        <span className="rounded-full border border-sky-500/40 bg-sky-500/20 px-2 py-0.5 text-xs font-medium text-sky-300">
+                        <span className="rounded-full border border-primary/40 bg-mint px-2 py-0.5 text-xs font-medium text-forest">
                           Yours
                         </span>
                       )}
                       {isClaimedByOther && (
-                        <span className="rounded-full border border-slate-500/40 bg-slate-500/20 px-2 py-0.5 text-xs font-medium text-slate-400">
+                        <span className="rounded-full border border-forest/20 bg-forest/5 px-2 py-0.5 text-xs font-medium text-forest/60">
                           Claimed by someone else
                         </span>
                       )}
@@ -154,7 +154,7 @@ export function ClaimDevicePage() {
                         <button
                           type="button"
                           onClick={() => handleClaim(d.mac)}
-                          className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500"
+                          className="rounded-xl bg-primary px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90"
                         >
                           Claim
                         </button>
@@ -177,7 +177,7 @@ export function ClaimDevicePage() {
           </p>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="mac" className="block text-sm text-slate-400">
+              <label htmlFor="mac" className="block text-sm font-medium text-forest/80">
                 Device MAC
               </label>
               <input
@@ -186,22 +186,22 @@ export function ClaimDevicePage() {
                 value={mac}
                 onChange={(e) => setMac(e.target.value)}
                 placeholder="D4:E9:F4:BD:36:CC"
-                className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 font-mono text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="mt-1.5 w-full rounded-2xl border border-forest/10 bg-white px-3 py-2 font-mono text-forest placeholder-forest/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
             </div>
-            {error && <p className="text-sm text-red-400">{error}</p>}
-            {success && <p className="text-sm text-emerald-400">{success}</p>}
+            {error && <p className="text-sm text-terracotta">{error}</p>}
+            {success && <p className="text-sm text-primary">{success}</p>}
             <div className="flex gap-2">
               <button
                 type="submit"
-                className="rounded-lg bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+                className="rounded-2xl bg-primary px-4 py-2 font-medium text-white transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface"
               >
                 Claim
               </button>
               <button
                 type="button"
                 onClick={() => navigate('/')}
-                className="rounded-lg border border-slate-600 px-4 py-2 text-slate-300 hover:bg-slate-800"
+                className="rounded-2xl border border-forest/10 bg-mint/50 px-4 py-2 text-forest transition hover:bg-mint focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
                 Cancel
               </button>

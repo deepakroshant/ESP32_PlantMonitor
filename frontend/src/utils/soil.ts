@@ -46,3 +46,21 @@ export function soilRawToGauge(raw: number): number {
   const clamped = Math.max(min, Math.min(max, raw))
   return 1 - (clamped - min) / (max - min)
 }
+
+/**
+ * 0–1 for gauge using user calibration: boneDry = dry reading, submerged = wet reading.
+ * If either is missing, falls back to default range.
+ */
+export function soilRawToGaugeCalibrated(
+  raw: number,
+  boneDry: number | null | undefined,
+  submerged: number | null | undefined
+): number {
+  if (boneDry != null && submerged != null && boneDry !== submerged) {
+    const min = Math.min(boneDry, submerged)
+    const max = Math.max(boneDry, submerged)
+    const clamped = Math.max(min, Math.min(max, raw))
+    return 1 - (clamped - min) / (max - min)
+  }
+  return soilRawToGauge(raw)
+}

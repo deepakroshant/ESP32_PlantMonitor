@@ -28,14 +28,14 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
-      <div className="w-full max-w-sm rounded-xl border border-slate-700 bg-slate-900/80 p-6 shadow-xl">
-        <h1 className="mb-6 text-xl font-semibold text-slate-100">
+    <div className="flex min-h-screen items-center justify-center bg-surface p-4">
+      <div className="w-full max-w-sm rounded-[32px] border border-white/20 bg-white/80 p-8 shadow-card backdrop-blur-xl">
+        <h1 className="mb-6 text-2xl font-bold tracking-tight text-forest">
           Smart Plant Pro
         </h1>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label htmlFor="email" className="block text-sm text-slate-400">
+            <label htmlFor="email" className="block text-sm font-medium text-forest/80">
               Email
             </label>
             <input
@@ -44,12 +44,12 @@ export function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="mt-1.5 w-full rounded-2xl border border-forest/10 bg-white/90 px-4 py-3 text-forest placeholder-forest/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               placeholder="you@example.com"
             />
           </div>
           <div>
-            <label htmlFor="password" className="block text-sm text-slate-400">
+            <label htmlFor="password" className="block text-sm font-medium text-forest/80">
               Password
             </label>
             <input
@@ -58,28 +58,26 @@ export function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="mt-1.5 w-full rounded-2xl border border-forest/10 bg-white/90 px-4 py-3 text-forest placeholder-forest/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
               placeholder="••••••••"
             />
           </div>
           {error && (
-            <p className="text-sm text-red-400">{error}</p>
+            <p className="text-sm text-terracotta">{error}</p>
           )}
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              className="flex-1 rounded-lg bg-emerald-600 px-4 py-2 font-medium text-white hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-slate-900"
-            >
-              {isSignUp ? 'Sign up' : 'Sign in'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsSignUp((v) => !v)}
-              className="rounded-lg border border-slate-600 px-4 py-2 text-slate-300 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 focus:ring-offset-slate-900"
-            >
-              {isSignUp ? 'Sign in' : 'Sign up'}
-            </button>
-          </div>
+          <button
+            type="submit"
+            className="w-full rounded-2xl bg-primary px-4 py-3 font-semibold text-white shadow-card transition hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface"
+          >
+            {isSignUp ? 'Sign up' : 'Sign in'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsSignUp((v) => !v)}
+            className="w-full rounded-2xl border border-forest/15 bg-mint/50 px-4 py-2.5 text-sm font-medium text-forest transition hover:bg-mint focus:outline-none focus:ring-2 focus:ring-primary/20"
+          >
+            {isSignUp ? 'Already have an account? Sign in' : 'Need an account? Sign up'}
+          </button>
         </form>
       </div>
     </div>

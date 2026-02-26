@@ -11,14 +11,21 @@ The device writes readings to `devices/<MAC_ADDRESS>/...` and the web app uses F
 
 ---
 
-## 1. What you must fill in (required setup)
+## 1. First-time setup (WiFi + Firebase)
 
-Open `src/main.cpp` and replace these placeholders:
+### WiFi (one-time, no code change)
+
+**First boot:** The ESP32 has no WiFi saved. It starts an access point named **SmartPlantPro**. Join it from your phone or laptop, then open a browser to **http://192.168.4.1**. Enter your home WiFi SSID and password. You can also enter **Firebase API Key**, **DB URL**, **Firebase user email**, and **Firebase user password** in the same form; if provided, they are saved to NVS and used instead of compile-time defaults. Click Save. The device connects and uses the saved credentials for future boots.
+
+**To change WiFi (or Firebase) later:** In the web app dashboard, select the device and click **Reset device WiFi**. The device clears both WiFi and Firebase config from NVS and restarts in AP mode so you can enter a new network (and optionally new Firebase settings) at 192.168.4.1 again.
+
+### Firebase (portal or code)
+
+**Option A – Portal:** At first WiFi setup (192.168.4.1) you can enter Firebase API Key, DB URL, and device user email/password. They are stored in NVS and used on every boot. No need to reflash for a different project.
+
+**Option B – Compile-time:** Open `src/main.cpp` and set:
 
 ```cpp
-const char *WIFI_SSID = "YOUR_WIFI_SSID";
-const char *WIFI_PASS = "YOUR_WIFI_PASSWORD";
-
 #define API_KEY "YOUR_FIREBASE_WEB_API_KEY"
 #define DB_URL  "https://<your-project-id>.firebaseio.com/"
 
@@ -26,16 +33,27 @@ const char *FIREBASE_USER_EMAIL = "YOUR_DEVICE_USER_EMAIL";
 const char *FIREBASE_USER_PASSWORD = "YOUR_DEVICE_USER_PASSWORD";
 ```
 
-### Where to get each value
-
-- **WIFI_SSID / WIFI_PASS**: your Wi‑Fi network credentials.
 - **API_KEY**: Firebase Project → Project Settings → General → “Web API Key”.
-- **DB_URL**: Firebase Realtime Database → copy the database URL, e.g. `https://your-project-id-default-rtdb.firebaseio.com/`
-- **FIREBASE_USER_EMAIL / FIREBASE_USER_PASSWORD** (recommended):
-  - Firebase Auth → enable Email/Password
-  - create a dedicated “device user” (or use your own during development)
+- **DB_URL**: Firebase Realtime Database URL, e.g. `https://your-project-id-default-rtdb.firebaseio.com/`
+- **FIREBASE_USER_EMAIL / FIREBASE_USER_PASSWORD**: Create a dedicated “device user” in Firebase Auth (Email/Password) or use your own during development.
 
-If you leave email/password empty, **RTDB writes will only work if your RTDB rules allow unauthenticated access** (not recommended).
+Optional: see **PLAN.md** for moving Firebase config into the WiFiManager portal so nothing is hardcoded.
+
+### OTA (Over-the-air updates)
+
+After the device is on WiFi, you can upload new firmware without USB. In `platformio.ini` uncomment and set:
+
+```ini
+upload_protocol = espota
+upload_port = 192.168.1.XXX   ; your device’s IP
+```
+
+Then use **Upload** in PlatformIO; the device must be powered and on the same network.
+
+### Calibration and alerts
+
+- **Calibration:** In the dashboard, use “Calibrate soil sensor” → **Mark as dry** and **Mark as wet** so the soil gauge uses your sensor’s range. Values are stored in `devices/<MAC>/calibration/`.
+- **Alerts:** When device health is not OK, the ESP32 writes to `devices/<MAC>/alerts/lastAlert`. The dashboard shows “Last alert” when present. Optional: add a Firebase Cloud Function to send FCM/email (see PLAN.md).
 
 ---
 
@@ -79,9 +97,12 @@ devices/<MAC_ADDRESS>/
   control/
     pumpRequest: boolean
     targetSoil: number
+    resetProvisioning: boolean   # true = device clears WiFi and restarts in AP mode (set from app)
   calibration/
     boneDry: number
     submerged: number
+  alerts/
+    lastAlert: { timestamp, type, message }   # Written by ESP32 when health != OK
 users/<uid>/devices/<MAC_ADDRESS>: true
 users/<uid>/invites/<key>: { email: string, at: number }   # Invite list (web app)
 deviceList/<MAC_ADDRESS>/

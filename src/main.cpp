@@ -10,6 +10,9 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <Wire.h>
+#include <WiFiManager.h>
+#include <ArduinoOTA.h>
+#include <Preferences.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BMP280.h>
 #include <Firebase_ESP_Client.h>
@@ -25,16 +28,14 @@ static constexpr uint8_t LIGHT_SENSOR_PIN = 35;  // Digital
 static constexpr uint8_t RELAY_PIN        = 25;  // Active LOW: LOW = pump ON
 
 // -----------------------------------------------------------------------------
-// WiFi / Firebase configuration (fill these in)
+// WiFi: from WiFiManager (first boot = AP "SmartPlantPro", then from flash).
+// Firebase: from portal (NVS) if user filled the form at 192.168.4.1, else these defaults.
 // -----------------------------------------------------------------------------
-const char *WIFI_SSID = "TELUS8180";
-const char *WIFI_PASS = "gordfather";
-
 #define API_KEY "AIzaSyCZBClU2J2bV9b3Tm9uvuPteQhNF0nwJQ4"
 #define DB_URL  "https://esw-plantmonitor-default-rtdb.firebaseio.com/"
 
 // Firebase Auth (recommended: create a dedicated user for the device)
-// If you leave these eimage.pngmpty, RTDB will only work if your database rules allow unauthenticated access.
+// If you leave these empty, RTDB will only work if your database rules allow unauthenticated access.
 const char *FIREBASE_USER_EMAIL = "deepakroshan73@gmail.com";
 const char *FIREBASE_USER_PASSWORD = "123456";
 
@@ -46,6 +47,23 @@ static constexpr uint32_t FIREBASE_SYNC_INTERVAL_MS = 10000;  // 10 s
 static constexpr TickType_t PUMP_PULSE_MS  = pdMS_TO_TICKS(1000);
 static constexpr TickType_t PUMP_SOAK_MS   = pdMS_TO_TICKS(5000);
 static constexpr TickType_t PUMP_IDLE_MS   = pdMS_TO_TICKS(500);
+
+// -----------------------------------------------------------------------------
+// WiFiManager (global so we can call resetSettings() when app requests re-provision)
+// -----------------------------------------------------------------------------
+WiFiManager wm;
+
+// Firebase config from NVS (portal) or compile-time defaults; buffers must outlive setup()
+static char nvs_fb_api_key[80];
+static char nvs_fb_db_url[130];
+static char nvs_fb_email[72];
+static char nvs_fb_password[72];
+
+static const char* NVS_NAMESPACE = "fb";
+static const char* PREF_API = "apik";
+static const char* PREF_URL = "url";
+static const char* PREF_EM = "em";
+static const char* PREF_PW = "pw";
 
 // -----------------------------------------------------------------------------
 // Firebase globals
@@ -89,8 +107,11 @@ void updateRelay(bool on);
 String readingsPath();
 String healthStatus(const SensorState &s);
 uint16_t fetchTargetSoil();
+bool fetchResetProvisioning();
 void streamCallback(FirebaseStream data);
 void streamTimeoutCallback(bool timeout);
+void clearFirebaseNVS();
+void loadFirebaseFromNVSAndApply();
 
 // -----------------------------------------------------------------------------
 // Setup
@@ -109,27 +130,56 @@ void setup() {
 
   initializeHardware();
 
-  // WiFi
+  // WiFi + optional Firebase via WiFiManager portal (192.168.4.1)
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-  Serial.print("Connecting to WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(250);
-    Serial.print('.');
+
+  WiFiManagerParameter p_fb_api("fb_apikey", "Firebase API Key", API_KEY, 79);
+  WiFiManagerParameter p_fb_url("fb_dburl", "Firebase DB URL", DB_URL, 129);
+  WiFiManagerParameter p_fb_email("fb_email", "Firebase user email", FIREBASE_USER_EMAIL, 71);
+  WiFiManagerParameter p_fb_pw("fb_password", "Firebase user password", FIREBASE_USER_PASSWORD, 71);
+  wm.addParameter(&p_fb_api);
+  wm.addParameter(&p_fb_url);
+  wm.addParameter(&p_fb_email);
+  wm.addParameter(&p_fb_pw);
+
+  if (!wm.autoConnect("SmartPlantPro")) {
+    Serial.println("WiFiManager failed to connect, restarting...");
+    delay(3000);
+    ESP.restart();
   }
-  Serial.print("\nWiFi connected, IP: ");
+
+  // Save Firebase fields from portal to NVS if user filled them
+  const char* api = p_fb_api.getValue();
+  const char* url = p_fb_url.getValue();
+  const char* em = p_fb_email.getValue();
+  const char* pw = p_fb_pw.getValue();
+  if (api && url && em && pw && strlen(api) > 0 && strlen(url) > 0) {
+    Preferences prefs;
+    if (prefs.begin(NVS_NAMESPACE, false)) {
+      prefs.putString(PREF_API, api);
+      prefs.putString(PREF_URL, url);
+      prefs.putString(PREF_EM, em);
+      prefs.putString(PREF_PW, pw);
+      prefs.end();
+      Serial.println("Firebase config saved to NVS from portal.");
+    }
+  }
+
+  Serial.print("WiFi connected, IP: ");
   Serial.println(WiFi.localIP());
 
   deviceId = WiFi.macAddress(); // e.g. "24:6F:28:AA:BB:CC"
   Serial.print("Device ID (MAC): ");
   Serial.println(deviceId);
 
-  // Firebase init
-  fbAuth.user.email = FIREBASE_USER_EMAIL;
-  fbAuth.user.password = FIREBASE_USER_PASSWORD;
-  fbConfig.api_key = API_KEY;
-  fbConfig.database_url = DB_URL;
+  // OTA: upload firmware over WiFi (e.g. PlatformIO: upload_port = <device-IP>, upload_protocol = espota)
+  ArduinoOTA.setHostname("SmartPlantPro");
+  ArduinoOTA.begin();
+  Serial.println("ArduinoOTA ready.");
+
+  // Firebase init: use NVS if present, else compile-time defaults
+  loadFirebaseFromNVSAndApply();
   Firebase.begin(&fbConfig, &fbAuth);
   Firebase.reconnectWiFi(true);
 
@@ -171,8 +221,58 @@ void setup() {
 }
 
 void loop() {
-  // All work is done in FreeRTOS tasks.
-  vTaskDelay(pdMS_TO_TICKS(1000));
+  ArduinoOTA.handle();
+  vTaskDelay(pdMS_TO_TICKS(100));
+}
+
+// -----------------------------------------------------------------------------
+// Firebase NVS: load and apply to fbConfig/fbAuth; clear on re-provision
+// -----------------------------------------------------------------------------
+void loadFirebaseFromNVSAndApply() {
+  Preferences prefs;
+  bool haveNvs = false;
+  if (prefs.begin(NVS_NAMESPACE, true)) {
+    String apik = prefs.getString(PREF_API, "");
+    String url = prefs.getString(PREF_URL, "");
+    String em = prefs.getString(PREF_EM, "");
+    String pw = prefs.getString(PREF_PW, "");
+    prefs.end();
+    if (apik.length() > 0 && url.length() > 0) {
+      apik.toCharArray(nvs_fb_api_key, sizeof(nvs_fb_api_key));
+      url.toCharArray(nvs_fb_db_url, sizeof(nvs_fb_db_url));
+      em.toCharArray(nvs_fb_email, sizeof(nvs_fb_email));
+      pw.toCharArray(nvs_fb_password, sizeof(nvs_fb_password));
+      fbConfig.api_key = nvs_fb_api_key;
+      fbConfig.database_url = nvs_fb_db_url;
+      fbAuth.user.email = nvs_fb_email;
+      fbAuth.user.password = nvs_fb_password;
+      haveNvs = true;
+      Serial.println("Using Firebase config from NVS.");
+    }
+  }
+  if (!haveNvs) {
+    strncpy(nvs_fb_api_key, API_KEY, sizeof(nvs_fb_api_key) - 1);
+    nvs_fb_api_key[sizeof(nvs_fb_api_key) - 1] = '\0';
+    strncpy(nvs_fb_db_url, DB_URL, sizeof(nvs_fb_db_url) - 1);
+    nvs_fb_db_url[sizeof(nvs_fb_db_url) - 1] = '\0';
+    strncpy(nvs_fb_email, FIREBASE_USER_EMAIL, sizeof(nvs_fb_email) - 1);
+    nvs_fb_email[sizeof(nvs_fb_email) - 1] = '\0';
+    strncpy(nvs_fb_password, FIREBASE_USER_PASSWORD, sizeof(nvs_fb_password) - 1);
+    nvs_fb_password[sizeof(nvs_fb_password) - 1] = '\0';
+    fbConfig.api_key = nvs_fb_api_key;
+    fbConfig.database_url = nvs_fb_db_url;
+    fbAuth.user.email = nvs_fb_email;
+    fbAuth.user.password = nvs_fb_password;
+    Serial.println("Using Firebase config from compile-time defaults.");
+  }
+}
+
+void clearFirebaseNVS() {
+  Preferences prefs;
+  if (prefs.begin(NVS_NAMESPACE, false)) {
+    prefs.clear();
+    prefs.end();
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -273,7 +373,31 @@ void taskFirebaseSync(void *pv) {
       if (!Firebase.RTDB.setInt(&fbClient, deviceListPath.c_str(), (int)(millis() / 1000))) {
         // non-fatal
       }
+      // Alerts: when health is not OK, write lastAlert for dashboard / future FCM
+      String h = healthStatus(s);
+      if (h != "OK") {
+        String alertPath = "devices/" + deviceId + "/alerts/lastAlert";
+        FirebaseJson alertJson;
+        alertJson.set("timestamp", (int)(millis() / 1000));
+        alertJson.set("type", "health");
+        alertJson.set("message", h);
+        Firebase.RTDB.updateNode(&fbClient, alertPath.c_str(), &alertJson);
+      }
       xSemaphoreGive(gFirebaseMutex);
+    }
+
+    // Re-provisioning: app set devices/<MAC>/control/resetProvisioning = true → clear WiFi, reboot
+    if (Firebase.ready() && fetchResetProvisioning()) {
+      String path = "devices/" + deviceId + "/control/resetProvisioning";
+      if (xSemaphoreTake(gFirebaseMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+        Firebase.RTDB.setBool(&fbClient, path.c_str(), false);
+        xSemaphoreGive(gFirebaseMutex);
+      }
+      Serial.println("Re-provision requested: clearing WiFi and Firebase NVS, restarting...");
+      clearFirebaseNVS();
+      wm.resetSettings();
+      delay(500);
+      ESP.restart();
     }
 
     vTaskDelay(period);
@@ -299,6 +423,15 @@ uint16_t fetchTargetSoil() {
   }
   // Default threshold if not set
   return 2800;
+}
+
+bool fetchResetProvisioning() {
+  String path = "devices/" + deviceId + "/control/resetProvisioning";
+  if (xSemaphoreTake(gFirebaseMutex, pdMS_TO_TICKS(500)) != pdTRUE) return false;
+  bool ok = Firebase.RTDB.getBool(&fbClient, path.c_str());
+  bool val = ok && fbClient.boolData();
+  xSemaphoreGive(gFirebaseMutex);
+  return val;
 }
 
 void taskPumpControl(void *pv) {
