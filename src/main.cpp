@@ -731,6 +731,12 @@ void taskFirebaseSync(void *pv) {
     // Re-provisioning: app set devices/<MAC>/control/resetProvisioning = true → clear WiFi, reboot.
     // CRITICAL: clear the flag in Firebase BEFORE resetting, otherwise the device
     // will find it still true on next boot and enter an infinite reset loop.
+    // Grace period: ignore reset for 3 min after first sync — avoids responding to stale flag
+    // left from a previous "Reset WiFi" click before user reconfigured via portal.
+    static unsigned long s_firstSyncAt = 0;
+    if (s_firstSyncAt == 0) s_firstSyncAt = millis();
+    bool inGracePeriod = (millis() - s_firstSyncAt) < 180000;
+
     if (Firebase.ready() && fetchResetProvisioning()) {
       String path = "devices/" + deviceId + "/control/resetProvisioning";
       bool cleared = false;
@@ -746,6 +752,8 @@ void taskFirebaseSync(void *pv) {
       }
       if (!cleared) {
         Serial.println("[Reset] Could not clear flag in Firebase — skipping reset to avoid boot loop.");
+      } else if (inGracePeriod) {
+        Serial.println("[Reset] Flag cleared (grace period — not resetting).");
       } else {
         Serial.println("[Reset] Flag cleared. Clearing WiFi and Firebase NVS, restarting...");
         clearFirebaseNVS();
