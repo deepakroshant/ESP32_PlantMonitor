@@ -6,7 +6,7 @@
 
 - **Device (ESP32):** Reads temperature (BMP280), soil moisture (ADC), light (LDR), and reports WiFi SSID + signal strength. Sends readings to **Firebase Realtime Database** every 10s. Listens for pump commands and health alerts. First-time WiFi/Firebase setup is done via a branded **captive portal** at 192.168.4.1 — no credentials hardcoded.
 - **Cloud (Firebase):** Realtime Database holds all device and user data. Data paths: `devices/<MAC>/...` (readings, control, calibration, alerts) and `users/<uid>/...` (claimed devices, plant profiles).
-- **Web app (React + Tailwind + Vite):** Modern green sustainability-themed UI with glassmorphism cards. Login, claim devices, live dashboard with circular gauge, manual pump trigger, soil calibration, plant profiles, WiFi status indicator, offline detection, and guided reset flow.
+- **Web app (React + Tailwind + Vite):** Modern green susssssstainability-themed UI with glassmorphism cards. Login, claim devices, live dashboard with circular gauge, manual pump trigger, soil calibration, plant profiles, WiFi status indicator, offline detection, and guided reset flow.
 
 **Flow:** ESP32 → WiFi (provisioned once) → Firebase ← Web app
 

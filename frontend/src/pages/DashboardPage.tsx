@@ -6,7 +6,6 @@ import { firebaseDb } from '../lib/firebase'
 import { useAuth } from '../context/AuthContext'
 import { soilStatus, soilStatusLabel, soilRawToGaugeCalibrated } from '../utils/soil'
 import { CircularGauge } from '../components/CircularGauge'
-import { DeviceIcon } from '../components/icons/DeviceIcon'
 import { LogoutIcon } from '../components/icons/LogoutIcon'
 import { PlusIcon } from '../components/icons/PlusIcon'
 import { PlantIcon } from '../components/icons/PlantIcon'
@@ -456,14 +455,14 @@ export function DashboardPage() {
   const lastSeenSec = readings?.timestamp ?? 0
   const tsLooksValid = lastSeenSec > 1577836800
   const secondsAgo = tsLooksValid ? nowSec - lastSeenSec : Infinity
-  const isStale = secondsAgo > 30
-  const isOffline = secondsAgo > 120
+  const isStale = secondsAgo > 20
+  const isOffline = secondsAgo > 60
   const lastUpdated = readings?.timestamp != null && tsLooksValid
     ? new Date(readings.timestamp * 1000).toLocaleTimeString()
     : null
   const lastSeenLabel =
     !tsLooksValid
-      ? 'unknown'
+      ? 'never'
       : secondsAgo < 60
         ? `${secondsAgo}s ago`
         : secondsAgo < 3600
@@ -472,33 +471,59 @@ export function DashboardPage() {
             ? `${Math.floor(secondsAgo / 3600)} h ago`
             : `${Math.floor(secondsAgo / 86400)} d ago`
 
+  type DeviceStatus = 'live' | 'stale' | 'offline' | 'syncing' | 'resetting' | 'never'
+  const deviceStatus: DeviceStatus =
+    resetFlowActive ? 'resetting'
+    : syncPhase === 'wifi-connected' ? 'syncing'
+    : !tsLooksValid ? 'never'
+    : isOffline ? 'offline'
+    : isStale ? 'stale'
+    : 'live'
+
   const isSyncing = syncPhase === 'wifi-connected'
-  const dataUntrusted = isOffline || isSyncing
+  const dataUntrusted = deviceStatus === 'offline' || deviceStatus === 'syncing' || deviceStatus === 'never'
+
+  const statusConfig: Record<DeviceStatus, { color: string; bgColor: string; borderColor: string; label: string; description: string }> = {
+    live:       { color: 'text-primary',    bgColor: 'bg-primary/10',     borderColor: 'border-primary/20',    label: 'Live',       description: `Receiving data — updated ${lastSeenLabel}` },
+    stale:      { color: 'text-amber-600',  bgColor: 'bg-amber-50',       borderColor: 'border-amber-200/60',  label: 'Delayed',    description: `Last data ${lastSeenLabel} — device may be slow to respond` },
+    offline:    { color: 'text-red-500',    bgColor: 'bg-red-50',         borderColor: 'border-red-200/60',    label: 'Offline',    description: `Last seen ${lastSeenLabel} — device is not sending data` },
+    syncing:    { color: 'text-blue-500',   bgColor: 'bg-blue-50',        borderColor: 'border-blue-200/60',   label: 'Syncing',    description: 'Connected to WiFi — waiting for sensor data…' },
+    resetting:  { color: 'text-amber-600',  bgColor: 'bg-amber-50',       borderColor: 'border-amber-200/60',  label: 'Resetting',  description: 'Device is restarting into setup mode…' },
+    never:      { color: 'text-forest/40',  bgColor: 'bg-forest/5',       borderColor: 'border-forest/10',     label: 'No data',    description: 'This device has never sent readings' },
+  }
+  const status = statusConfig[deviceStatus]
 
   return (
     <div className="min-h-screen bg-surface p-4 md:p-6 lg:p-8">
       <div className="mx-auto max-w-4xl">
-        <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
+        <header className="mb-8 flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-white/60 px-4 py-3 shadow-card backdrop-blur-sm sm:px-6 sm:py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-              <PlantIcon className="h-5 w-5 text-primary" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-600 shadow-sm">
+              <PlantIcon className="h-4.5 w-4.5 text-white" />
             </div>
-            <h1 className="font-display text-xl font-bold tracking-tight text-forest sm:text-2xl">
-              Smart Plant Pro
-            </h1>
+            <div>
+              <h1 className="font-display text-lg font-bold tracking-tight text-forest sm:text-xl">
+                Smart Plant Pro
+              </h1>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             {user && (
-              <span className="hidden rounded-xl bg-white/60 px-3 py-2 text-xs text-forest/50 backdrop-blur-sm sm:inline-block">
-                {user.displayName || user.email || 'Account'}
-              </span>
+              <div className="hidden items-center gap-2 rounded-xl bg-surface px-3 py-1.5 sm:flex">
+                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
+                  {(user.displayName || user.email || 'U')[0].toUpperCase()}
+                </div>
+                <span className="max-w-[120px] truncate text-xs text-forest/60">
+                  {user.displayName || user.email || 'Account'}
+                </span>
+              </div>
             )}
             <Link to="/claim" className="btn-ghost flex items-center gap-1.5 !py-2 !px-3 !text-xs">
-              <DeviceIcon className="h-4 w-4" />
+              <PlusIcon className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Add device</span>
             </Link>
-            <button onClick={() => signOut()} className="btn-ghost flex items-center gap-1.5 !py-2 !px-3 !text-xs">
-              <LogoutIcon className="h-4 w-4" />
+            <button onClick={() => signOut()} className="btn-ghost flex items-center gap-1.5 !py-2 !px-3 !text-xs text-forest/50 hover:text-red-500">
+              <LogoutIcon className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Sign out</span>
             </button>
           </div>
@@ -517,77 +542,84 @@ export function DashboardPage() {
           </div>
         ) : (
           <>
-            <div className="mb-6">
-              <label className="stat-label mb-2 block">Device</label>
-              <div className="flex flex-wrap items-center gap-2">
-                <select
-                  value={selectedMac}
-                  onChange={(e) => {
-                    const v = e.target.value
-                    setSelectedMac(v)
-                    localStorage.setItem(STORAGE_KEY, v)
-                  }}
-                  className="input-field max-w-sm !font-mono"
-                >
-                  {myDevices.map((mac) => (
-                    <option key={mac} value={mac}>
-                      {mac}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={handleResetDeviceWiFi}
-                  disabled={resetFlowActive}
-                  className={`rounded-2xl border px-3 py-2 text-xs font-medium transition ${
-                    resetFlowActive
-                      ? 'cursor-not-allowed border-forest/10 bg-forest/5 text-forest/30'
-                      : 'border-terracotta/30 bg-terracotta/10 text-terracotta hover:bg-terracotta/20'
-                  }`}
-                  title="Device will clear its WiFi config and restart in AP mode so you can enter a new network"
-                >
-                  {resetFlowActive ? 'Reset sent' : 'Reset device WiFi'}
-                </button>
+            {/* Device selector + status card */}
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`mb-6 rounded-3xl border ${status.borderColor} ${status.bgColor} p-4 transition-colors duration-500 sm:p-5`}
+            >
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <select
+                    value={selectedMac}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setSelectedMac(v)
+                      localStorage.setItem(STORAGE_KEY, v)
+                    }}
+                    className="rounded-xl border border-forest/10 bg-white/80 px-3 py-2 font-mono text-xs text-forest focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 sm:text-sm"
+                  >
+                    {myDevices.map((mac) => (
+                      <option key={mac} value={mac}>
+                        {mac}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={handleResetDeviceWiFi}
+                    disabled={resetFlowActive}
+                    className={`rounded-xl border px-3 py-2 text-xs font-medium transition ${
+                      resetFlowActive
+                        ? 'cursor-not-allowed border-forest/10 bg-white/40 text-forest/30'
+                        : 'border-red-200 bg-white/60 text-red-500 hover:bg-red-50'
+                    }`}
+                    title="Device will clear its WiFi config and restart in AP mode"
+                  >
+                    {resetFlowActive ? 'Reset sent…' : 'Reset WiFi'}
+                  </button>
+                </div>
+
+                {/* Status badge */}
+                <div className="flex items-center gap-2">
+                  <span className="relative flex h-2.5 w-2.5">
+                    {(deviceStatus === 'live' || deviceStatus === 'syncing') && (
+                      <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${
+                        deviceStatus === 'live' ? 'bg-green-400' : 'bg-blue-400'
+                      }`} />
+                    )}
+                    <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${
+                      deviceStatus === 'live' ? 'bg-green-500'
+                      : deviceStatus === 'stale' ? 'bg-amber-500'
+                      : deviceStatus === 'offline' ? 'bg-red-500'
+                      : deviceStatus === 'syncing' ? 'bg-blue-500'
+                      : deviceStatus === 'resetting' ? 'bg-amber-500'
+                      : 'bg-gray-400'
+                    }`} />
+                  </span>
+                  <span className={`text-sm font-semibold ${status.color}`}>
+                    {status.label}
+                  </span>
+                </div>
               </div>
-              {/* WiFi + sync status */}
-              <div className="mt-2 flex items-center gap-2">
-                {resetFlowActive ? (
-                  <>
-                    <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" /><span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" /></span>
-                    <span className="text-xs text-amber-700">Device is restarting…</span>
-                  </>
-                ) : syncPhase === 'wifi-connected' ? (
-                  <>
-                    <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/50" /><span className="relative inline-flex h-2 w-2 rounded-full bg-primary" /></span>
-                    <span className="text-xs text-forest/70">
-                      Connected to <strong className="font-medium text-forest">{readings?.wifiSSID}</strong> — syncing sensor data…
-                    </span>
-                  </>
-                ) : syncPhase === 'synced' ? (
-                  <>
-                    <span className="inline-flex h-2 w-2 rounded-full bg-primary" />
-                    <span className="text-xs font-medium text-primary">
-                      Sync complete — connected to {readings?.wifiSSID}
-                    </span>
-                  </>
-                ) : readings?.wifiSSID && !isOffline ? (
-                  <>
-                    <span className="inline-flex h-2 w-2 rounded-full bg-primary" />
-                    <span className="text-xs text-forest/70">
-                      Connected to <strong className="font-medium text-forest">{readings.wifiSSID}</strong>
-                      {readings.wifiRSSI != null && (
-                        <span className="ml-1 text-forest/40">({readings.wifiRSSI} dBm)</span>
-                      )}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span className="inline-flex h-2 w-2 rounded-full bg-terracotta" />
-                    <span className="text-xs text-terracotta/80">Not connected to WiFi</span>
-                  </>
+
+              {/* Status description line */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <p className={`text-xs ${status.color} opacity-80`}>{status.description}</p>
+                {readings?.wifiSSID && (
+                  <p className="text-xs text-forest/40">
+                    {deviceStatus === 'live' ? 'WiFi: ' : 'Last WiFi: '}
+                    <span className="font-medium text-forest/60">{readings.wifiSSID}</span>
+                    {readings.wifiRSSI != null && deviceStatus === 'live' && (
+                      <span className="ml-1">({readings.wifiRSSI} dBm)</span>
+                    )}
+                  </p>
+                )}
+                {lastUpdated && deviceStatus === 'live' && (
+                  <p className="text-xs text-forest/35">Updated at {lastUpdated}</p>
                 )}
               </div>
-            </div>
+            </motion.div>
 
             {/* Reset WiFi: full-page provisioning guide replaces dashboard content */}
             {resetFlowActive && (
@@ -667,68 +699,56 @@ export function DashboardPage() {
             )}
 
             {!resetFlowActive && (<>
-            {/* Syncing banner */}
-            {syncPhase === 'wifi-connected' && (
-              <motion.div
-                initial={{ opacity: 0, y: -6 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mb-4 flex items-center gap-3 rounded-[24px] border border-primary/30 bg-primary/5 px-5 py-4"
-              >
-                <span className="relative flex h-3 w-3 shrink-0">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/40" />
-                  <span className="relative inline-flex h-3 w-3 rounded-full bg-primary" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-forest">Connected to WiFi — syncing sensor data…</p>
-                  <p className="text-xs text-forest/60">
-                    The device is online. Waiting for fresh sensor readings…
-                  </p>
-                </div>
-              </motion.div>
-            )}
-
             {/* Sync complete banner */}
             {syncPhase === 'synced' && (
               <motion.div
                 initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="mb-4 flex items-center gap-3 rounded-[24px] border border-primary/30 bg-primary/10 px-5 py-3"
+                className="mb-4 flex items-center gap-3 rounded-2xl border border-primary/30 bg-primary/10 px-5 py-3"
               >
                 <svg className="h-5 w-5 shrink-0 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
                 <p className="text-sm font-medium text-primary">Sync complete — live data is now showing</p>
               </motion.div>
             )}
 
-            {/* Offline banner */}
-            {isOffline && syncPhase === 'idle' && (
+            {/* Stale warning banner */}
+            {deviceStatus === 'stale' && (
               <motion.div
                 initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="mb-4 flex items-center gap-3 rounded-[24px] border border-terracotta/30 bg-terracotta/5 px-5 py-3"
+                className="mb-4 flex items-center gap-3 rounded-2xl border border-amber-200/60 bg-amber-50/80 px-4 py-3"
               >
-                <span className="flex h-3 w-3 shrink-0">
-                  <span className="absolute inline-flex h-3 w-3 animate-ping rounded-full bg-terracotta/40" />
-                  <span className="relative inline-flex h-3 w-3 rounded-full bg-terracotta" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-terracotta">Device offline</p>
-                  <p className="text-xs text-forest/60">
-                    {tsLooksValid
-                      ? `Last seen ${lastSeenLabel}. Readings below may be outdated.`
-                      : 'No valid timestamp received. The device may never have connected.'}
-                  </p>
-                </div>
+                <svg className="h-4 w-4 shrink-0 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
+                <p className="text-xs text-amber-700">
+                  Data may be slightly outdated — last update was {lastSeenLabel}
+                </p>
               </motion.div>
             )}
 
-            {!isOffline && (lastUpdated || isStale) && (
-              <p className="mb-4 text-xs text-forest/60">
-                {isStale ? (
-                  <span>Last seen: {lastSeenLabel}</span>
-                ) : (
-                  <>Last reading: {lastUpdated}</>
-                )}
-              </p>
+            {/* Offline banner with help */}
+            {deviceStatus === 'offline' && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4 rounded-2xl border border-red-200/60 bg-red-50/80 px-4 py-4"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-100">
+                    <svg className="h-4 w-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M18.364 5.636a9 9 0 010 12.728M5.636 18.364a9 9 0 010-12.728m12.728 0L5.636 18.364" /></svg>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-red-600">Device appears offline</p>
+                    <p className="mt-0.5 text-xs text-red-500/70">
+                      Last seen {lastSeenLabel}. The values below are frozen from the last known reading.
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <span className="rounded-md bg-red-100/80 px-2 py-0.5 text-[10px] font-medium text-red-600">Check power supply</span>
+                      <span className="rounded-md bg-red-100/80 px-2 py-0.5 text-[10px] font-medium text-red-600">Check WiFi range</span>
+                      <span className="rounded-md bg-red-100/80 px-2 py-0.5 text-[10px] font-medium text-red-600">Try resetting WiFi</span>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
             )}
 
             {/* Hero: plant name/type + overall health */}
@@ -739,12 +759,18 @@ export function DashboardPage() {
               transition={{ duration: 0.3 }}
               className="section-card mb-6 flex items-center gap-4 !p-4 sm:gap-5 sm:!p-5"
             >
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 sm:h-14 sm:w-14">
-                <PlantIcon className="h-6 w-6 text-primary sm:h-7 sm:w-7" />
+              <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl transition-colors duration-500 sm:h-14 sm:w-14 ${
+                dataUntrusted ? 'bg-forest/5' : 'bg-primary/10'
+              }`}>
+                <PlantIcon className={`h-6 w-6 transition-colors duration-500 sm:h-7 sm:w-7 ${
+                  dataUntrusted ? 'text-forest/30' : 'text-primary'
+                }`} />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-forest sm:text-base">
+                  <p className={`text-sm font-medium sm:text-base transition-colors duration-300 ${
+                    dataUntrusted ? 'text-forest/50' : 'text-forest'
+                  }`}>
                     {currentPlant?.name ?? 'Your plant'}
                   </p>
                   <button
@@ -756,15 +782,22 @@ export function DashboardPage() {
                     <PencilIcon className="h-4 w-4" />
                   </button>
                 </div>
-                <p className="text-xs text-forest/60">
-                  {currentPlant?.type ? `${currentPlant.type} · Device status` : 'Device status'}
+                <p className="text-xs text-forest/50">
+                  {currentPlant?.type ? `${currentPlant.type}` : 'No plant type set'}
+                  {deviceStatus === 'live' && <span className="ml-1.5 text-green-500">· Live</span>}
+                  {deviceStatus === 'stale' && <span className="ml-1.5 text-amber-500">· Delayed</span>}
+                  {deviceStatus === 'offline' && <span className="ml-1.5 text-red-400">· Offline</span>}
                 </p>
               </div>
               <div className="shrink-0 text-right">
-                <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-forest/70 sm:text-xs">Overall health</p>
+                <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-forest/50 sm:text-xs">Health</p>
                 {dataUntrusted ? (
-                  <span className="inline-block rounded-full border-2 border-forest/15 bg-forest/5 px-4 py-2 text-sm font-semibold text-forest/40 sm:px-5 sm:py-2.5 sm:text-base">
-                    {isSyncing ? 'Syncing' : 'Offline'}
+                  <span className="inline-block rounded-full border-2 border-forest/10 bg-forest/5 px-4 py-2 text-sm font-semibold text-forest/30 sm:px-5 sm:py-2.5 sm:text-base">
+                    {isSyncing ? '…' : '—'}
+                  </span>
+                ) : isStale ? (
+                  <span className="inline-block rounded-full border-2 border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-600 sm:px-5 sm:py-2.5 sm:text-base">
+                    {readings?.health ?? '?'}
                   </span>
                 ) : (
                   <span
@@ -835,42 +868,68 @@ export function DashboardPage() {
               </div>
             </div>
 
-            <motion.div
-              key={`gauges-${selectedMac}`}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: dataUntrusted ? 0.45 : 1, y: 0 }}
-              transition={{ duration: 0.3, delay: 0.05 }}
-              className={`grid gap-4 sm:grid-cols-2 lg:grid-cols-3 ${dataUntrusted ? 'pointer-events-none select-none grayscale-[30%]' : ''}`}
-            >
-              <div className="section-card">
-                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-                  <ThermometerIcon className="h-5 w-5 text-primary" />
+            <div className="relative">
+              {/* Frozen data overlay */}
+              {dataUntrusted && (
+                <div className="pointer-events-none absolute -inset-1 z-10 flex items-start justify-center rounded-3xl">
+                  <div className="pointer-events-auto mt-20 rounded-2xl bg-white/95 px-5 py-3 shadow-lg backdrop-blur-sm">
+                    <p className="text-center text-sm font-semibold text-forest/60">
+                      {deviceStatus === 'syncing' ? 'Waiting for sensor data…' : deviceStatus === 'never' ? 'No data yet' : 'Data frozen — device offline'}
+                    </p>
+                  </div>
                 </div>
-                <p className="stat-label mb-1">Temperature</p>
-                <p className="font-display text-2xl font-bold tabular-nums text-forest">
-                  {temp != null && !Number.isNaN(temp)
-                    ? `${displayTemp.toFixed(1)}°C`
-                    : '—'}
-                </p>
-              </div>
-              <div className="section-card lg:col-span-2">
-                <p className="stat-label mb-4 text-center">Soil moisture</p>
-                <CircularGauge percentage={displayGaugePct} label={soilLabel} size={170} strokeWidth={10} />
-              </div>
-              <div className="section-card">
-                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-                  <SunIcon className="h-5 w-5 text-primary" />
-                </div>
-                <p className="stat-label mb-1">Light</p>
-                <p className="font-display text-xl font-bold text-forest">
-                  {readings?.lightBright === true
-                    ? 'Bright'
-                    : readings?.lightBright === false
-                      ? 'Dim'
+              )}
+
+              <motion.div
+                key={`gauges-${selectedMac}`}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: dataUntrusted ? 0.35 : isStale ? 0.7 : 1, y: 0 }}
+                transition={{ duration: 0.3, delay: 0.05 }}
+                className={`grid gap-4 sm:grid-cols-2 lg:grid-cols-3 transition-all duration-500 ${
+                  dataUntrusted ? 'pointer-events-none select-none blur-[1px] grayscale-[40%]'
+                  : isStale ? 'grayscale-[15%]'
+                  : ''
+                }`}
+              >
+                <div className="section-card relative overflow-hidden">
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                    <ThermometerIcon className="h-5 w-5 text-primary" />
+                  </div>
+                  <p className="stat-label mb-1">Temperature</p>
+                  <p className="font-display text-2xl font-bold tabular-nums text-forest">
+                    {temp != null && !Number.isNaN(temp)
+                      ? `${displayTemp.toFixed(1)}°C`
                       : '—'}
-                </p>
-              </div>
-            </motion.div>
+                  </p>
+                  {deviceStatus === 'live' && (
+                    <div className="absolute right-3 top-3 h-1.5 w-1.5 rounded-full bg-green-400 shadow-[0_0_6px_rgba(34,197,94,0.4)]" />
+                  )}
+                </div>
+                <div className="section-card relative overflow-hidden lg:col-span-2">
+                  <p className="stat-label mb-4 text-center">Soil moisture</p>
+                  <CircularGauge percentage={displayGaugePct} label={soilLabel} size={170} strokeWidth={10} />
+                  {deviceStatus === 'live' && (
+                    <div className="absolute right-3 top-3 h-1.5 w-1.5 rounded-full bg-green-400 shadow-[0_0_6px_rgba(34,197,94,0.4)]" />
+                  )}
+                </div>
+                <div className="section-card relative overflow-hidden">
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                    <SunIcon className="h-5 w-5 text-primary" />
+                  </div>
+                  <p className="stat-label mb-1">Light</p>
+                  <p className="font-display text-xl font-bold text-forest">
+                    {readings?.lightBright === true
+                      ? 'Bright'
+                      : readings?.lightBright === false
+                        ? 'Dim'
+                        : '—'}
+                  </p>
+                  {deviceStatus === 'live' && (
+                    <div className="absolute right-3 top-3 h-1.5 w-1.5 rounded-full bg-green-400 shadow-[0_0_6px_rgba(34,197,94,0.4)]" />
+                  )}
+                </div>
+              </motion.div>
+            </div>
 
             {/* History chart */}
             {selectedMac && !dataUntrusted && (
