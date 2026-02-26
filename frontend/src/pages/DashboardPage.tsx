@@ -62,6 +62,7 @@ export function DashboardPage() {
   const [newProfileType, setNewProfileType] = useState('')
   const [newProfilePresetId, setNewProfilePresetId] = useState<string | null>(null)
   const [resetFlowActive, setResetFlowActive] = useState(false)
+  const [resetRequestedAt, setResetRequestedAt] = useState(0)
   const [calibration, setCalibration] = useState<{ boneDry: number | null; submerged: number | null }>({ boneDry: null, submerged: null })
   const [lastAlert, setLastAlert] = useState<{ timestamp: number; type: string; message: string } | null>(null)
   const appUrl = typeof window !== 'undefined' ? window.location.origin : ''
@@ -298,8 +299,13 @@ export function DashboardPage() {
 
   async function handleResetDeviceWiFi() {
     if (!selectedMac || resetFlowActive) return
-    await set(ref(firebaseDb, `devices/${selectedMac}/control/resetProvisioning`), true).catch(console.error)
-    setReadings(null)
+    const now = Math.floor(Date.now() / 1000)
+    await Promise.all([
+      set(ref(firebaseDb, `devices/${selectedMac}/control/resetProvisioning`), true),
+      set(ref(firebaseDb, `devices/${selectedMac}/readings/wifiSSID`), null),
+      set(ref(firebaseDb, `devices/${selectedMac}/readings/wifiRSSI`), null),
+    ]).catch(console.error)
+    setResetRequestedAt(now)
     setResetFlowActive(true)
   }
 
@@ -335,13 +341,17 @@ export function DashboardPage() {
     setNewProfilePresetId(null)
   }
 
-  // Auto-dismiss reset flow once device comes back online with fresh data
+  // Auto-dismiss reset flow once device pushes data written AFTER the reset was requested
   useEffect(() => {
-    if (!resetFlowActive) return
+    if (!resetFlowActive || !resetRequestedAt) return
     const ts = readings?.timestamp ?? 0
-    const fresh = ts > 1577836800 && Math.floor(Date.now() / 1000) - ts < 30
-    if (fresh) setResetFlowActive(false)
-  }, [readings?.timestamp, resetFlowActive])
+    const writtenAfterReset = ts > resetRequestedAt
+    const hasWifi = !!readings?.wifiSSID
+    if (writtenAfterReset && hasWifi) {
+      setResetFlowActive(false)
+      setResetRequestedAt(0)
+    }
+  }, [readings?.timestamp, readings?.wifiSSID, resetFlowActive, resetRequestedAt])
 
   const currentPlant = linkedProfileId ? profiles[linkedProfileId] : null
 
@@ -468,24 +478,34 @@ export function DashboardPage() {
                 </button>
               </div>
               {/* WiFi connection status */}
-              <div className="mt-2 flex items-center gap-2">
-                {readings?.wifiSSID && !isOffline ? (
-                  <>
-                    <span className="inline-flex h-2 w-2 rounded-full bg-primary" />
-                    <span className="text-xs text-forest/70">
-                      Connected to <strong className="font-medium text-forest">{readings.wifiSSID}</strong>
-                      {readings.wifiRSSI != null && (
-                        <span className="ml-1 text-forest/40">({readings.wifiRSSI} dBm)</span>
-                      )}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span className="inline-flex h-2 w-2 rounded-full bg-terracotta" />
-                    <span className="text-xs text-terracotta/80">Not connected to WiFi</span>
-                  </>
-                )}
-              </div>
+              {(() => {
+                const dataIsPostReset = resetRequestedAt > 0
+                  ? (readings?.timestamp ?? 0) > resetRequestedAt
+                  : true
+                const wifiOk = !!readings?.wifiSSID && !isOffline && !resetFlowActive && dataIsPostReset
+                return (
+                  <div className="mt-2 flex items-center gap-2">
+                    {wifiOk ? (
+                      <>
+                        <span className="inline-flex h-2 w-2 rounded-full bg-primary" />
+                        <span className="text-xs text-forest/70">
+                          Connected to <strong className="font-medium text-forest">{readings!.wifiSSID}</strong>
+                          {readings!.wifiRSSI != null && (
+                            <span className="ml-1 text-forest/40">({readings!.wifiRSSI} dBm)</span>
+                          )}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="inline-flex h-2 w-2 rounded-full bg-terracotta" />
+                        <span className="text-xs text-terracotta/80">
+                          {resetFlowActive ? 'Device is restarting…' : 'Not connected to WiFi'}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Reset WiFi: full-page provisioning guide replaces dashboard content */}
