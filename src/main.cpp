@@ -9,6 +9,7 @@
 
 #include <Arduino.h>
 #include <WiFi.h>
+#include <esp_wifi.h>
 #include <Wire.h>
 #include <WiFiManager.h>
 #include <ArduinoOTA.h>
@@ -746,7 +747,9 @@ void taskFirebaseSync(void *pv) {
         Serial.println("[Reset] Flag cleared. Clearing WiFi and Firebase NVS, restarting...");
         clearFirebaseNVS();
         wm.resetSettings();
-        delay(500);
+        WiFi.disconnect(true);
+        esp_wifi_restore();
+        delay(1000);
         ESP.restart();
       }
     }
