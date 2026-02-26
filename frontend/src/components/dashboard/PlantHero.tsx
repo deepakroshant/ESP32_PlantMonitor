@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import type { DeviceStatus, Readings } from '../../types'
+import type { ProfileTip } from '../../utils/profileTips'
 import { PlantIcon } from '../icons/PlantIcon'
 import { PencilIcon } from '../icons/PencilIcon'
 import { spring } from '../../lib/motion'
@@ -15,6 +16,9 @@ type Props = {
   healthOk: boolean
   onEditPlant: () => void
   readings?: Readings | null
+  lastWateredEpoch?: number | null
+  todayTotalMs?: number
+  profileTips?: ProfileTip[]
 }
 
 const statusChip: Partial<Record<DeviceStatus, { text: string; dot: string }>> = {
@@ -28,9 +32,18 @@ function formatPressureHpa(pa: number): string {
   return (pa / 100).toFixed(0)
 }
 
+function formatSecondsAgo(epoch: number): string {
+  const d = Math.floor(Date.now() / 1000) - epoch
+  if (d < 60) return 'just now'
+  if (d < 3600) return `${Math.floor(d / 60)}m ago`
+  if (d < 86400) return `${Math.floor(d / 3600)}h ago`
+  return `${Math.floor(d / 86400)}d ago`
+}
+
 export function PlantHero({
   selectedMac, plantName, plantType, deviceStatus,
   dataUntrusted, isDelayed, health, healthOk, onEditPlant, readings,
+  lastWateredEpoch, todayTotalMs = 0, profileTips = [],
 }: Props) {
   const chip = statusChip[deviceStatus]
 
@@ -129,14 +142,40 @@ export function PlantHero({
         </div>
       </div>
 
+      {/* Profile-based tips */}
+      {profileTips.length > 0 && !dataUntrusted && (
+        <div className="mt-3 flex flex-wrap gap-2 border-t border-forest/5 pt-3">
+          {profileTips.filter((t) => t.severity !== 'ok').map((t) => (
+            <span
+              key={t.id}
+              className={`rounded-lg px-2.5 py-1 text-xs font-medium ${
+                t.severity === 'warning' ? 'bg-amber-500/10 text-amber-700' : 'bg-sky-500/10 text-sky-700'
+              }`}
+            >
+              {t.message}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* Live quick stats */}
-      {quickStats.length > 0 && (
+      {(quickStats.length > 0 || lastWateredEpoch != null || todayTotalMs > 0) && (
         <div className="mt-3 flex flex-wrap gap-2 border-t border-forest/5 pt-3">
           {quickStats.map((s) => (
             <span key={s} className="rounded-lg bg-forest/[0.03] px-2.5 py-1 text-xs font-medium tabular-nums text-forest-500">
               {s}
             </span>
           ))}
+          {lastWateredEpoch != null && lastWateredEpoch > 0 && (
+            <span className="rounded-lg bg-sky-500/10 px-2.5 py-1 text-xs font-medium text-sky-700">
+              Last watered {formatSecondsAgo(lastWateredEpoch)}
+            </span>
+          )}
+          {todayTotalMs > 0 && (
+            <span className="rounded-lg bg-sky-500/10 px-2.5 py-1 text-xs font-medium text-sky-700">
+              Today: {(todayTotalMs / 1000).toFixed(0)}s total
+            </span>
+          )}
         </div>
       )}
     </motion.div>

@@ -1,12 +1,13 @@
 import { useEffect, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, animate } from 'framer-motion'
-import { ref, onValue, set, push, remove } from 'firebase/database'
+import { ref, query, orderByKey, limitToLast, onValue, set, push, remove } from 'firebase/database'
 import { firebaseDb } from '../lib/firebase'
 import { useAuth } from '../context/AuthContext'
 import { soilStatus, soilStatusLabel, soilRawToGaugeCalibrated } from '../utils/soil'
+import { getProfileTips } from '../utils/profileTips'
 import { getDeviceStatus, STATUS_META, formatSecondsAgo } from '../utils/deviceStatus'
-import type { Readings, PlantProfile, DeviceStatus } from '../types'
+import type { Readings, PlantProfile, DeviceStatus, DeviceMeta, WateringSchedule } from '../types'
 import { LogoutIcon } from '../components/icons/LogoutIcon'
 import { PlusIcon } from '../components/icons/PlusIcon'
 import { PlantIcon } from '../components/icons/PlantIcon'
@@ -34,6 +35,7 @@ export function DashboardPage() {
 
   // ── State ──
   const [myDevices, setMyDevices] = useState<string[]>([])
+  const [devicesMeta, setDevicesMeta] = useState<Record<string, DeviceMeta>>({})
   const [selectedMac, setSelectedMac] = useState<string>(() => localStorage.getItem(STORAGE_KEY) ?? '')
   const [readings, setReadings] = useState<Readings | null>(null)
   const [targetSoil, setTargetSoil] = useState(2800)
@@ -47,7 +49,17 @@ export function DashboardPage() {
   const [linkedProfileId, setLinkedProfileId] = useState<string | null>(null)
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState({ name: '', type: '' })
+  const [editForm, setEditForm] = useState<{
+    name: string
+    type: string
+    soilMin?: number
+    soilMax?: number
+    tempMin?: number
+    tempMax?: number
+    humidityMin?: number
+    humidityMax?: number
+    lightPreference?: 'bright' | 'dim' | 'any'
+  }>({ name: '', type: '' })
   const [editPresetId, setEditPresetId] = useState<string | null>(null)
   const [newProfileName, setNewProfileName] = useState('')
   const [newProfileType, setNewProfileType] = useState('')
@@ -73,6 +85,9 @@ export function DashboardPage() {
   const [lastAlert, setLastAlert] = useState<{ timestamp: number; type: string; message: string } | null>(null)
   const [pumpActive, setPumpActive] = useState(false)
   const [pumpCooldown, setPumpCooldown] = useState(false)
+  const [waterLog, setWaterLog] = useState<Array<{ epoch: number; reason: string; durationMs: number; soilBefore: number; soilAfter: number }>>([])
+  const [schedule, setSchedule] = useState<WateringSchedule>({ enabled: false, hour: 8, minute: 0, hysteresis: 200, maxSecondsPerDay: 120, cooldownMinutes: 30 })
+  const [diagnostics, setDiagnostics] = useState<{ uptimeSec?: number; lastSyncAt?: number; syncSuccessCount?: number; syncFailCount?: number; wifiRSSI?: number } | null>(null)
   const [notificationsEnabled, setNotificationsEnabled] = useState(() =>
     typeof window !== 'undefined' && localStorage.getItem('notif_enabled') === 'true'
   )
@@ -88,6 +103,16 @@ export function DashboardPage() {
       const val = snap.val()
       const list = val ? Object.keys(val) as string[] : []
       setMyDevices(list)
+      const meta: Record<string, DeviceMeta> = {}
+      if (val && typeof val === 'object') {
+        for (const mac of list) {
+          const d = (val as Record<string, { meta?: { name?: string; room?: string } }>)[mac]
+          if (d?.meta && typeof d.meta === 'object') {
+            meta[mac] = { name: d.meta.name, room: d.meta.room }
+          }
+        }
+      }
+      setDevicesMeta(meta)
       if (list.length && !list.includes(selectedMac)) {
         const next = list[0]
         setSelectedMac(next)
@@ -155,6 +180,67 @@ export function DashboardPage() {
   }, [selectedMac])
 
   useEffect(() => {
+    if (!selectedMac) { setDiagnostics(null); return }
+    return onValue(ref(firebaseDb, `devices/${selectedMac}/diagnostics`), (snap) => {
+      const val = snap.val()
+      if (!val || typeof val !== 'object') { setDiagnostics(null); return }
+      const o = val as Record<string, unknown>
+      setDiagnostics({
+        uptimeSec: typeof o.uptimeSec === 'number' ? o.uptimeSec : undefined,
+        lastSyncAt: typeof o.lastSyncAt === 'number' ? o.lastSyncAt : undefined,
+        syncSuccessCount: typeof o.syncSuccessCount === 'number' ? o.syncSuccessCount : undefined,
+        syncFailCount: typeof o.syncFailCount === 'number' ? o.syncFailCount : undefined,
+        wifiRSSI: typeof o.wifiRSSI === 'number' ? o.wifiRSSI : undefined,
+      })
+    })
+  }, [selectedMac])
+
+  useEffect(() => {
+    if (!selectedMac) { setSchedule({ enabled: false, hour: 8, minute: 0, hysteresis: 200, maxSecondsPerDay: 120, cooldownMinutes: 30 }); return }
+    return onValue(ref(firebaseDb, `devices/${selectedMac}/control/schedule`), (snap) => {
+      const val = snap.val()
+      if (!val || typeof val !== 'object') {
+        setSchedule({ enabled: false, hour: 8, minute: 0, hysteresis: 200, maxSecondsPerDay: 120, cooldownMinutes: 30 })
+        return
+      }
+      const o = val as Record<string, unknown>
+      setSchedule({
+        enabled: o.enabled === true,
+        hour: typeof o.hour === 'number' ? o.hour : 8,
+        minute: typeof o.minute === 'number' ? o.minute : 0,
+        hysteresis: typeof o.hysteresis === 'number' ? o.hysteresis : 200,
+        maxSecondsPerDay: typeof o.maxSecondsPerDay === 'number' ? o.maxSecondsPerDay : 120,
+        cooldownMinutes: typeof o.cooldownMinutes === 'number' ? o.cooldownMinutes : 30,
+        day: typeof o.day === 'string' ? o.day : undefined,
+        todaySeconds: typeof o.todaySeconds === 'number' ? o.todaySeconds : undefined,
+        lastWateredAt: typeof o.lastWateredAt === 'number' ? o.lastWateredAt : undefined,
+      })
+    })
+  }, [selectedMac])
+
+  useEffect(() => {
+    if (!selectedMac) { setWaterLog([]); return }
+    const waterLogRef = ref(firebaseDb, `devices/${selectedMac}/waterLog`)
+    const q = query(waterLogRef, orderByKey(), limitToLast(50))
+    return onValue(q, (snap) => {
+      const val = snap.val()
+      if (!val || typeof val !== 'object') { setWaterLog([]); return }
+      const entries = Object.entries(val).map(([k, v]) => {
+        const o = v as Record<string, unknown>
+        return {
+          epoch: parseInt(k, 10),
+          reason: typeof o.reason === 'string' ? o.reason : 'manual',
+          durationMs: typeof o.durationMs === 'number' ? o.durationMs : 0,
+          soilBefore: typeof o.soilBefore === 'number' ? o.soilBefore : 0,
+          soilAfter: typeof o.soilAfter === 'number' ? o.soilAfter : 0,
+        }
+      })
+      entries.sort((a, b) => b.epoch - a.epoch)
+      setWaterLog(entries)
+    })
+  }, [selectedMac])
+
+  useEffect(() => {
     if (!user) return
     return onValue(ref(firebaseDb, `users/${user.uid}/invites`), (snap) => {
       const val = snap.val()
@@ -174,6 +260,42 @@ export function DashboardPage() {
     setTargetSoil(n)
   }
 
+  const [scheduleInput, setScheduleInput] = useState({
+    enabled: false,
+    hour: 8,
+    minute: 0,
+    hysteresis: 200,
+    maxSecondsPerDay: 120,
+    cooldownMinutes: 30,
+  })
+  useEffect(() => {
+    setScheduleInput({
+      enabled: schedule.enabled ?? false,
+      hour: schedule.hour ?? 8,
+      minute: schedule.minute ?? 0,
+      hysteresis: schedule.hysteresis ?? 200,
+      maxSecondsPerDay: schedule.maxSecondsPerDay ?? 120,
+      cooldownMinutes: schedule.cooldownMinutes ?? 30,
+    })
+  }, [schedule.enabled, schedule.hour, schedule.minute, schedule.hysteresis, schedule.maxSecondsPerDay, schedule.cooldownMinutes])
+
+  async function handleSaveSchedule() {
+    if (!selectedMac) return
+    await set(ref(firebaseDb, `devices/${selectedMac}/control/schedule/enabled`), scheduleInput.enabled).catch(console.error)
+    await set(ref(firebaseDb, `devices/${selectedMac}/control/schedule/hour`), Math.max(0, Math.min(23, scheduleInput.hour))).catch(console.error)
+    await set(ref(firebaseDb, `devices/${selectedMac}/control/schedule/minute`), Math.max(0, Math.min(59, scheduleInput.minute))).catch(console.error)
+    await set(ref(firebaseDb, `devices/${selectedMac}/control/schedule/hysteresis`), Math.max(0, Math.min(2000, scheduleInput.hysteresis))).catch(console.error)
+    await set(ref(firebaseDb, `devices/${selectedMac}/control/schedule/maxSecondsPerDay`), Math.max(10, Math.min(600, scheduleInput.maxSecondsPerDay))).catch(console.error)
+    await set(ref(firebaseDb, `devices/${selectedMac}/control/schedule/cooldownMinutes`), Math.max(5, Math.min(1440, scheduleInput.cooldownMinutes))).catch(console.error)
+    setSchedule((prev) => ({ ...prev, ...scheduleInput }))
+  }
+
+  async function handleSaveDeviceMeta(mac: string, meta: DeviceMeta) {
+    if (!user) return
+    await set(ref(firebaseDb, `users/${user.uid}/devices/${mac}/meta`), meta).catch(console.error)
+    setDevicesMeta((prev) => ({ ...prev, [mac]: meta }))
+  }
+
   async function handleCopyUrl() {
     try { await navigator.clipboard.writeText(appUrl); setCopyOk(true); setTimeout(() => setCopyOk(false), 2000) }
     catch { setCopyOk(false) }
@@ -190,27 +312,66 @@ export function DashboardPage() {
   function openEditPlant(profileId: string | null) {
     setEditPresetId(null)
     if (profileId && profiles[profileId]) {
+      const p = profiles[profileId]
       setEditingProfileId(profileId)
-      setEditForm({ name: profiles[profileId].name, type: profiles[profileId].type })
+      setEditForm({
+        name: p.name,
+        type: p.type,
+        soilMin: p.soilMin,
+        soilMax: p.soilMax,
+        tempMin: p.tempMin,
+        tempMax: p.tempMax,
+        humidityMin: p.humidityMin,
+        humidityMax: p.humidityMax,
+        lightPreference: p.lightPreference ?? 'any',
+      })
     } else { setEditingProfileId(null); setEditForm({ name: '', type: '' }) }
     setEditModalOpen(true)
   }
 
-  function closeEditPlant() { setEditModalOpen(false); setEditingProfileId(null); setEditForm({ name: '', type: '' }); setEditPresetId(null) }
+  function closeEditPlant() {
+    setEditModalOpen(false)
+    setEditingProfileId(null)
+    setEditForm({ name: '', type: '' })
+    setEditPresetId(null)
+  }
 
   async function saveEditPlant(andLinkToDevice: boolean) {
-    const name = editForm.name.trim(); const type = editForm.type.trim()
+    const name = editForm.name.trim()
+    const type = editForm.type.trim()
     if (!name || !user) return
     const now = Date.now()
+    const profilePayload: PlantProfile = {
+      name,
+      type: type || '—',
+      createdAt: profiles[editingProfileId ?? '']?.createdAt ?? now,
+    }
+    if (editForm.soilMin != null && editForm.soilMax != null && !Number.isNaN(editForm.soilMin) && !Number.isNaN(editForm.soilMax)) {
+      profilePayload.soilMin = editForm.soilMin
+      profilePayload.soilMax = editForm.soilMax
+    }
+    if (editForm.tempMin != null && editForm.tempMax != null && !Number.isNaN(editForm.tempMin) && !Number.isNaN(editForm.tempMax)) {
+      profilePayload.tempMin = editForm.tempMin
+      profilePayload.tempMax = editForm.tempMax
+    }
+    if (editForm.humidityMin != null && editForm.humidityMax != null && !Number.isNaN(editForm.humidityMin) && !Number.isNaN(editForm.humidityMax)) {
+      profilePayload.humidityMin = editForm.humidityMin
+      profilePayload.humidityMax = editForm.humidityMax
+    }
+    if (editForm.lightPreference && editForm.lightPreference !== 'any') {
+      profilePayload.lightPreference = editForm.lightPreference
+    }
     if (editingProfileId) {
-      await set(ref(firebaseDb, `users/${user.uid}/plantProfiles/${editingProfileId}`), { name, type: type || '—', createdAt: profiles[editingProfileId]?.createdAt ?? now }).catch(console.error)
+      await set(ref(firebaseDb, `users/${user.uid}/plantProfiles/${editingProfileId}`), profilePayload).catch(console.error)
       if (selectedMac && editPresetId) {
         const preset = EXAMPLE_PLANTS.find((p) => p.id === editPresetId)
         if (preset) { await set(ref(firebaseDb, `devices/${selectedMac}/control/targetSoil`), preset.targetSoil).catch(console.error); setTargetSoil(preset.targetSoil); setTargetSoilInput(String(preset.targetSoil)) }
       }
     } else {
-      const newRef = push(ref(firebaseDb, `users/${user.uid}/plantProfiles`)); const id = newRef.key; if (!id) return
-      await set(newRef, { name, type: type || '—', createdAt: now }).catch(console.error)
+      const newRef = push(ref(firebaseDb, `users/${user.uid}/plantProfiles`))
+      const id = newRef.key
+      if (!id) return
+      await set(newRef, profilePayload).catch(console.error)
       if (andLinkToDevice && selectedMac) {
         await set(ref(firebaseDb, `users/${user.uid}/devicePlant/${selectedMac}`), id).catch(console.error)
         if (editPresetId) { const preset = EXAMPLE_PLANTS.find((p) => p.id === editPresetId); if (preset) { await set(ref(firebaseDb, `devices/${selectedMac}/control/targetSoil`), preset.targetSoil).catch(console.error); setTargetSoil(preset.targetSoil); setTargetSoilInput(String(preset.targetSoil)) } }
@@ -371,12 +532,14 @@ export function DashboardPage() {
           <>
             <DeviceStatusBar
               devices={myDevices}
+              devicesMeta={devicesMeta}
               selectedMac={selectedMac}
               onSelectMac={(mac) => { setSelectedMac(mac); localStorage.setItem(STORAGE_KEY, mac) }}
+              onSaveDeviceMeta={handleSaveDeviceMeta}
               onResetWiFi={handleResetDeviceWiFi}
               isResetPending={resetRequestedAt > 0}
               deviceStatus={deviceStatus}
-              meta={meta}
+              statusMeta={meta}
               statusDescription={statusDescription[deviceStatus]}
               readings={readings}
               lastUpdated={lastUpdated}
@@ -431,6 +594,16 @@ export function DashboardPage() {
                 healthOk={healthOk}
                 onEditPlant={() => openEditPlant(linkedProfileId)}
                 readings={readings}
+                lastWateredEpoch={waterLog[0]?.epoch ?? null}
+                todayTotalMs={waterLog.reduce((sum, e) => {
+                  const d = new Date(e.epoch * 1000)
+                  const today = new Date()
+                  if (d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate()) {
+                    return sum + e.durationMs
+                  }
+                  return sum
+                }, 0)}
+                profileTips={getProfileTips(readings, currentPlant ?? null)}
               />
 
               {/* Alert + notification toggle */}
@@ -519,6 +692,40 @@ export function DashboardPage() {
                   </div>
                 </CollapsibleSection>
 
+                <CollapsibleSection title="Auto watering schedule" subtitle={schedule.enabled ? `Daily at ${String(schedule.hour ?? 8).padStart(2, '0')}:${String(schedule.minute ?? 0).padStart(2, '0')} · Max ${schedule.maxSecondsPerDay ?? 120}s/day` : 'Off'}>
+                  <p className="mb-4 text-sm text-forest-400">Water automatically when soil is dry at a set time. Uses hysteresis, max seconds per day, and cooldown for safety.</p>
+                  <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={scheduleInput.enabled} onChange={(e) => setScheduleInput((s) => ({ ...s, enabled: e.target.checked }))} className="rounded border-forest/20" />
+                      <span className="text-sm font-medium text-forest-600">Enabled</span>
+                    </label>
+                    <label className="block">
+                      <span className="text-xs text-forest-400">Hour (0–23)</span>
+                      <input type="number" min={0} max={23} value={scheduleInput.hour} onChange={(e) => setScheduleInput((s) => ({ ...s, hour: parseInt(e.target.value, 10) || 0 }))} className="input-field mt-0.5 w-full" />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs text-forest-400">Minute (0–59)</span>
+                      <input type="number" min={0} max={59} value={scheduleInput.minute} onChange={(e) => setScheduleInput((s) => ({ ...s, minute: parseInt(e.target.value, 10) || 0 }))} className="input-field mt-0.5 w-full" />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs text-forest-400">Hysteresis (raw)</span>
+                      <input type="number" min={0} max={2000} value={scheduleInput.hysteresis} onChange={(e) => setScheduleInput((s) => ({ ...s, hysteresis: parseInt(e.target.value, 10) || 0 }))} className="input-field mt-0.5 w-full" />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs text-forest-400">Max s/day</span>
+                      <input type="number" min={10} max={600} value={scheduleInput.maxSecondsPerDay} onChange={(e) => setScheduleInput((s) => ({ ...s, maxSecondsPerDay: parseInt(e.target.value, 10) || 60 }))} className="input-field mt-0.5 w-full" />
+                    </label>
+                    <label className="block">
+                      <span className="text-xs text-forest-400">Cooldown (min)</span>
+                      <input type="number" min={5} max={1440} value={scheduleInput.cooldownMinutes} onChange={(e) => setScheduleInput((s) => ({ ...s, cooldownMinutes: parseInt(e.target.value, 10) || 30 }))} className="input-field mt-0.5 w-full" />
+                    </label>
+                  </div>
+                  {schedule.todaySeconds != null && schedule.todaySeconds > 0 && (
+                    <p className="mb-3 text-xs text-forest-500">Today: {schedule.todaySeconds}s used</p>
+                  )}
+                  <button type="button" onClick={handleSaveSchedule} className="btn-primary">Save schedule</button>
+                </CollapsibleSection>
+
                 <CollapsibleSection title="Plant profiles" subtitle={`${Object.keys(profiles).length} profile${Object.keys(profiles).length !== 1 ? 's' : ''}`}>
                   <p className="mb-4 text-sm text-forest-400">Add profiles for different plants. Link one to this device to track its name and type.</p>
                   <form onSubmit={addNewProfile} className="mb-4 flex flex-wrap items-center gap-2">
@@ -551,6 +758,46 @@ export function DashboardPage() {
                     </ul>
                   )}
                 </CollapsibleSection>
+
+                <CollapsibleSection title="Device diagnostics" subtitle={diagnostics ? `Uptime ${diagnostics.uptimeSec != null ? `${Math.floor((diagnostics.uptimeSec ?? 0) / 60)}m` : '—'}` : 'Waiting…'}>
+                  <p className="mb-4 text-sm text-forest-400">Firmware-reported stats for troubleshooting.</p>
+                  {diagnostics ? (
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      {diagnostics.uptimeSec != null && (
+                        <div className="rounded-xl border border-forest/8 bg-surface/60 px-3 py-2">
+                          <p className="text-xs text-forest-400">Uptime</p>
+                          <p className="font-mono text-sm font-semibold text-forest">{Math.floor(diagnostics.uptimeSec / 60)} min</p>
+                        </div>
+                      )}
+                      {diagnostics.lastSyncAt != null && (
+                        <div className="rounded-xl border border-forest/8 bg-surface/60 px-3 py-2">
+                          <p className="text-xs text-forest-400">Last sync</p>
+                          <p className="font-mono text-sm font-semibold text-forest">{new Date(diagnostics.lastSyncAt * 1000).toLocaleTimeString()}</p>
+                        </div>
+                      )}
+                      {diagnostics.syncSuccessCount != null && (
+                        <div className="rounded-xl border border-forest/8 bg-surface/60 px-3 py-2">
+                          <p className="text-xs text-forest-400">Sync OK</p>
+                          <p className="font-mono text-sm font-semibold text-forest">{diagnostics.syncSuccessCount}</p>
+                        </div>
+                      )}
+                      {diagnostics.syncFailCount != null && diagnostics.syncFailCount > 0 && (
+                        <div className="rounded-xl border border-amber-200/60 bg-amber-50/60 px-3 py-2">
+                          <p className="text-xs text-amber-600">Sync fails</p>
+                          <p className="font-mono text-sm font-semibold text-amber-700">{diagnostics.syncFailCount}</p>
+                        </div>
+                      )}
+                      {diagnostics.wifiRSSI != null && (
+                        <div className="rounded-xl border border-forest/8 bg-surface/60 px-3 py-2">
+                          <p className="text-xs text-forest-400">WiFi RSSI</p>
+                          <p className="font-mono text-sm font-semibold text-forest">{diagnostics.wifiRSSI} dBm</p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-forest/35">No diagnostics data yet. Device may be offline or firmware is older.</p>
+                  )}
+                </CollapsibleSection>
               </div>
             </>)}
           </>
@@ -559,7 +806,7 @@ export function DashboardPage() {
         {/* Edit plant modal */}
         {editModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest/25 p-4 backdrop-blur-md" role="dialog" aria-modal="true" aria-labelledby="edit-plant-title" onClick={closeEditPlant}>
-            <motion.div variants={fadeScale} initial="hidden" animate="visible" exit="exit" className="glass-card-solid w-full max-w-sm rounded-3xl p-6 shadow-modal" onClick={(e) => e.stopPropagation()}>
+            <motion.div variants={fadeScale} initial="hidden" animate="visible" exit="exit" className="glass-card-solid w-full max-w-md rounded-3xl p-6 shadow-modal" onClick={(e) => e.stopPropagation()}>
               <h2 id="edit-plant-title" className="mb-4 text-lg font-semibold text-forest">{editingProfileId ? 'Edit plant' : 'Add plant'}</h2>
               <div className="mb-4 space-y-3">
                 <label className="block text-sm font-medium text-forest-600">
@@ -577,6 +824,35 @@ export function DashboardPage() {
                   Type
                   <input type="text" value={editForm.type} onChange={(e) => setEditForm((f) => ({ ...f, type: e.target.value }))} placeholder="e.g. Monstera, Succulent" className="mt-1 w-full input-field" />
                 </label>
+                <details className="rounded-xl border border-forest/10 bg-forest/[0.02]">
+                  <summary className="cursor-pointer px-3 py-2 text-sm font-medium text-forest-500">Ideal conditions (optional, for tips)</summary>
+                  <div className="space-y-2 border-t border-forest/5 p-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="text-xs">Soil min (raw)</label>
+                      <label className="text-xs">Soil max (raw)</label>
+                      <input type="number" min={0} max={4095} value={editForm.soilMin ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, soilMin: e.target.value === '' ? undefined : parseInt(e.target.value, 10) }))} className="input-field !py-1.5 !text-sm" placeholder="e.g. 1800" />
+                      <input type="number" min={0} max={4095} value={editForm.soilMax ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, soilMax: e.target.value === '' ? undefined : parseInt(e.target.value, 10) }))} className="input-field !py-1.5 !text-sm" placeholder="e.g. 2600" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="text-xs">Temp min (°C)</label>
+                      <label className="text-xs">Temp max (°C)</label>
+                      <input type="number" min={-10} max={50} step={0.5} value={editForm.tempMin ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, tempMin: e.target.value === '' ? undefined : parseFloat(e.target.value) }))} className="input-field !py-1.5 !text-sm" placeholder="e.g. 18" />
+                      <input type="number" min={-10} max={50} step={0.5} value={editForm.tempMax ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, tempMax: e.target.value === '' ? undefined : parseFloat(e.target.value) }))} className="input-field !py-1.5 !text-sm" placeholder="e.g. 28" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="text-xs">Humidity min (%)</label>
+                      <label className="text-xs">Humidity max (%)</label>
+                      <input type="number" min={0} max={100} value={editForm.humidityMin ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, humidityMin: e.target.value === '' ? undefined : parseInt(e.target.value, 10) }))} className="input-field !py-1.5 !text-sm" placeholder="e.g. 40" />
+                      <input type="number" min={0} max={100} value={editForm.humidityMax ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, humidityMax: e.target.value === '' ? undefined : parseInt(e.target.value, 10) }))} className="input-field !py-1.5 !text-sm" placeholder="e.g. 70" />
+                    </div>
+                    <label className="block text-xs">Light preference</label>
+                    <select value={editForm.lightPreference ?? 'any'} onChange={(e) => setEditForm((f) => ({ ...f, lightPreference: e.target.value as 'bright' | 'dim' | 'any' }))} className="input-field !py-1.5 !text-sm">
+                      <option value="any">Any</option>
+                      <option value="bright">Bright</option>
+                      <option value="dim">Dim</option>
+                    </select>
+                  </div>
+                </details>
               </div>
               <div className="flex gap-2">
                 <button type="button" onClick={closeEditPlant} className="flex-1 btn-ghost">Cancel</button>

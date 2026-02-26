@@ -4,6 +4,7 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { LoginPage } from './pages/LoginPage'
 import { ClaimDevicePage } from './pages/ClaimDevicePage'
 import { DashboardPage } from './pages/DashboardPage'
+import { OverviewPage } from './pages/OverviewPage'
 
 function AnimatedRoutes() {
   const location = useLocation()
@@ -26,6 +27,10 @@ function AnimatedRoutes() {
           <Route
             path="/"
             element={<ProtectedRoute><DashboardPage /></ProtectedRoute>}
+          />
+          <Route
+            path="/overview"
+            element={<ProtectedRoute><OverviewPage /></ProtectedRoute>}
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

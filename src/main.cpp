@@ -31,14 +31,12 @@ static constexpr uint8_t RELAY_PIN        = 25;  // Active LOW: LOW = pump ON
 // -----------------------------------------------------------------------------
 // WiFi: from WiFiManager (first boot = AP "SmartPlantPro", then from flash).
 // Firebase: from portal (NVS) if user filled the form at 192.168.4.1, else these defaults.
+// Defaults come from firebase_defaults.h (empty) or optional secrets.h (gitignored).
 // -----------------------------------------------------------------------------
-#define API_KEY "AIzaSyCZBClU2J2bV9b3Tm9uvuPteQhNF0nwJQ4"
-#define DB_URL  "https://esw-plantmonitor-default-rtdb.firebaseio.com/"
+#include "firebase_defaults.h"
 
-// Firebase Auth (recommended: create a dedicated user for the device)
-// If you leave these empty, RTDB will only work if your database rules allow unauthenticated access.
-const char *FIREBASE_USER_EMAIL = "deepakroshan73@gmail.com";
-const char *FIREBASE_USER_PASSWORD = "123456";
+#define API_KEY FIREBASE_API_KEY
+#define DB_URL  FIREBASE_DB_URL
 
 // -----------------------------------------------------------------------------
 // Timing and defaults
@@ -92,6 +90,7 @@ SensorState gState{};
 SemaphoreHandle_t gStateMutex;
 SemaphoreHandle_t gFirebaseMutex;
 volatile bool gPumpRequest = false;
+volatile int gPumpReason = 0;  // 0=manual, 1=schedule
 volatile bool gSensorReady = false;
 
 // -----------------------------------------------------------------------------
@@ -120,6 +119,7 @@ String healthStatus(const SensorState &s);
 uint16_t fetchTargetSoil();
 bool fetchResetProvisioning();
 void streamCallback(FirebaseStream data);
+void taskScheduleCheck();
 void streamTimeoutCallback(bool timeout);
 void clearFirebaseNVS();
 void loadFirebaseFromNVSAndApply();
@@ -627,6 +627,7 @@ void taskFirebaseSync(void *pv) {
   Serial.println("[Sync] Sensor ready, starting sync loop.");
 
   static unsigned long syncCount = 0;
+  static unsigned long syncFailCount = 0;
 
   while (true) {
     SensorState s{};
@@ -662,6 +663,7 @@ void taskFirebaseSync(void *pv) {
       json.set("wifiRSSI", WiFi.RSSI());
 
       if (!Firebase.RTDB.updateNode(&fbClient, readingsPath().c_str(), &json)) {
+        syncFailCount++;
         Serial.print("[Sync] RTDB update FAILED: ");
         Serial.println(fbClient.errorReason());
       } else {
@@ -687,6 +689,23 @@ void taskFirebaseSync(void *pv) {
         alertJson.set("message", h);
         Firebase.RTDB.updateNode(&fbClient, alertPath.c_str(), &alertJson);
       }
+
+      // Schedule check: every 12 cycles (~60 s) see if auto-water should trigger
+      static int schedCycles = 0;
+      if (++schedCycles >= 12) {
+        schedCycles = 0;
+        taskScheduleCheck();
+      }
+
+      // Diagnostics: uptime, lastSync, counts, WiFi (for dashboard diagnostics panel)
+      String diagPath = "devices/" + deviceId + "/diagnostics";
+      FirebaseJson diagJson;
+      diagJson.set("uptimeSec", (int)(millis() / 1000));
+      diagJson.set("lastSyncAt", (int)time(nullptr));
+      diagJson.set("syncSuccessCount", (int)syncCount);
+      diagJson.set("syncFailCount", (int)syncFailCount);
+      diagJson.set("wifiRSSI", WiFi.RSSI());
+      Firebase.RTDB.updateNode(&fbClient, diagPath.c_str(), &diagJson);
 
       // History: push a compact snapshot every ~5 min (60 cycles × 5 s)
       static int histCycles = 0;
@@ -766,7 +785,119 @@ bool fetchResetProvisioning() {
   return val;
 }
 
+// Schedule config: devices/<MAC>/control/schedule/{enabled,hour,minute,hysteresis,maxSecondsPerDay,cooldownMinutes,day,todaySeconds,lastWateredAt}
+void taskScheduleCheck() {
+  if (!Firebase.ready() || xSemaphoreTake(gFirebaseMutex, pdMS_TO_TICKS(800)) != pdTRUE) return;
+
+  String base = "devices/" + deviceId + "/control/schedule/";
+  bool enabled = false;
+  int hour = 8, minute = 0;
+  int hysteresis = 200;
+  int maxSecondsPerDay = 120;
+  int cooldownMinutes = 30;
+  int todaySeconds = 0;
+  int lastWateredAt = 0;
+  String dayStr;
+
+  if (Firebase.RTDB.getBool(&fbClient, (base + "enabled").c_str())) {
+    enabled = fbClient.boolData();
+  }
+  if (!enabled) {
+    xSemaphoreGive(gFirebaseMutex);
+    return;
+  }
+
+  if (Firebase.RTDB.getInt(&fbClient, (base + "hour").c_str())) hour = fbClient.intData();
+  if (Firebase.RTDB.getInt(&fbClient, (base + "minute").c_str())) minute = fbClient.intData();
+  if (Firebase.RTDB.getInt(&fbClient, (base + "hysteresis").c_str())) hysteresis = fbClient.intData();
+  if (Firebase.RTDB.getInt(&fbClient, (base + "maxSecondsPerDay").c_str())) maxSecondsPerDay = fbClient.intData();
+  if (Firebase.RTDB.getInt(&fbClient, (base + "cooldownMinutes").c_str())) cooldownMinutes = fbClient.intData();
+  if (Firebase.RTDB.getInt(&fbClient, (base + "todaySeconds").c_str())) todaySeconds = fbClient.intData();
+  if (Firebase.RTDB.getInt(&fbClient, (base + "lastWateredAt").c_str())) lastWateredAt = fbClient.intData();
+  if (Firebase.RTDB.getString(&fbClient, (base + "day").c_str())) dayStr = fbClient.stringData();
+
+  xSemaphoreGive(gFirebaseMutex);
+  int target = fetchTargetSoil();  // acquires mutex internally
+
+  SensorState s{};
+  if (xSemaphoreTake(gStateMutex, pdMS_TO_TICKS(50)) != pdTRUE) return;
+  s = gState;
+  xSemaphoreGive(gStateMutex);
+
+  time_t now = time(nullptr);
+  if (now < 1000000000L) return;  // NTP not synced
+  struct tm* lt = localtime(&now);
+  int nowHour = lt->tm_hour;
+  int nowMin = lt->tm_min;
+
+  // Time window: allow watering within 5 min of scheduled time (check runs every 60s)
+  int scheduledMin = hour * 60 + minute;
+  int currentMin = nowHour * 60 + nowMin;
+  bool timeOk = (currentMin >= scheduledMin && currentMin <= scheduledMin + 5);
+
+  // Soil: water when soil > target (dry) - hysteresis lowers the threshold. Water when soilRaw > (target - hysteresis)?
+  // Actually: lower soilRaw = wetter. targetSoil = desired level. We water when soil is DRY = soilRaw HIGH.
+  // So we water when soilRaw > target. Hysteresis: don't water again until soil drops significantly. So we water when soilRaw > (target + hysteresis)?
+  // Standard: hysteresis prevents flip-flopping. Water when dry (soilRaw > target). Stop when wet (soilRaw <= target). Hysteresis: water when soilRaw > (target + hyst), stop when soilRaw <= (target - hyst). So we use target + hysteresis as "start watering" threshold.
+  int threshold = target + hysteresis;
+  if (threshold > 4095) threshold = 4095;
+  bool soilDry = (s.soilRaw > (uint16_t)threshold);
+
+  // Cooldown
+  bool cooldownOk = (lastWateredAt == 0) || ((int)now - lastWateredAt >= cooldownMinutes * 60);
+
+  // Daily cap
+  char todayBuf[16];
+  snprintf(todayBuf, sizeof(todayBuf), "%04d-%02d-%02d", lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday);
+  bool sameDay = (dayStr.length() > 0 && dayStr == todayBuf);
+  int cap = sameDay ? todaySeconds : 0;
+  bool underCap = (cap < maxSecondsPerDay);
+
+  if (timeOk && soilDry && cooldownOk && underCap && !gPumpRequest) {
+    gPumpReason = 1;  // schedule
+    gPumpRequest = true;
+    Serial.println("[Schedule] Triggering auto water: soil dry, time OK");
+  }
+}
+
+void updateScheduleAfterWater(int durationSec, uint16_t soilBefore, uint16_t soilAfter) {
+  if (!Firebase.ready()) return;
+  time_t now = time(nullptr);
+  if (now < 1000000000L) return;
+
+  struct tm* lt = localtime(&now);
+  char todayBuf[16];
+  snprintf(todayBuf, sizeof(todayBuf), "%04d-%02d-%02d", lt->tm_year + 1900, lt->tm_mon + 1, lt->tm_mday);
+
+  String base = "devices/" + deviceId + "/control/schedule/";
+  if (xSemaphoreTake(gFirebaseMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+    Firebase.RTDB.setInt(&fbClient, (base + "lastWateredAt").c_str(), (int)now);
+    Firebase.RTDB.setString(&fbClient, (base + "day").c_str(), todayBuf);
+    // todaySeconds: we need to add durationSec. First fetch current.
+    bool ok = Firebase.RTDB.getInt(&fbClient, (base + "todaySeconds").c_str());
+    int cur = ok ? fbClient.intData() : 0;
+    Firebase.RTDB.setInt(&fbClient, (base + "todaySeconds").c_str(), cur + durationSec);
+    xSemaphoreGive(gFirebaseMutex);
+  }
+}
+
+// Write a watering log entry (manual/schedule/auto)
+void writeWaterLog(const char *reason, uint32_t durationMs, uint16_t soilBefore, uint16_t soilAfter) {
+  if (!Firebase.ready()) return;
+  String path = "devices/" + deviceId + "/waterLog/" + String((int)time(nullptr));
+  FirebaseJson j;
+  j.set("reason", reason);
+  j.set("durationMs", (int)durationMs);
+  j.set("soilBefore", (int)soilBefore);
+  j.set("soilAfter", (int)soilAfter);
+  if (xSemaphoreTake(gFirebaseMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+    Firebase.RTDB.setJSON(&fbClient, path.c_str(), &j);
+    xSemaphoreGive(gFirebaseMutex);
+  }
+}
+
 void taskPumpControl(void *pv) {
+  const uint32_t pulseMs = pdTICKS_TO_MS(PUMP_PULSE_MS);
   while (true) {
     if (!gPumpRequest) {
       updateRelay(false);
@@ -795,6 +926,8 @@ void taskPumpControl(void *pv) {
       continue;
     }
 
+    uint16_t soilBefore = s.soilRaw;
+
     // Pulse: 1 s ON
     updateRelay(true);
     vTaskDelay(PUMP_PULSE_MS);
@@ -802,6 +935,18 @@ void taskPumpControl(void *pv) {
     // Soak: 5 s OFF
     updateRelay(false);
     vTaskDelay(PUMP_SOAK_MS);
+
+    // soilAfter: read current state after soak
+    if (xSemaphoreTake(gStateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+      s = gState;
+      xSemaphoreGive(gStateMutex);
+    }
+    const char* reason = (gPumpReason == 1) ? "schedule" : "manual";
+    writeWaterLog(reason, pulseMs, soilBefore, s.soilRaw);
+    if (gPumpReason == 1) {
+      updateScheduleAfterWater(pulseMs / 1000, soilBefore, s.soilRaw);
+      gPumpReason = 0;
+    }
   }
 }
 
@@ -809,6 +954,7 @@ void taskPumpControl(void *pv) {
 // Firebase stream callbacks
 // -----------------------------------------------------------------------------
 void streamCallback(FirebaseStream data) {
+  gPumpReason = 0;  // manual
   if (data.dataType() == "boolean") {
     gPumpRequest = data.boolData();
   } else if (data.dataType() == "int") {

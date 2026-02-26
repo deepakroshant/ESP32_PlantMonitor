@@ -19,25 +19,20 @@ The device writes readings to `devices/<MAC_ADDRESS>/...` and the web app uses F
 
 **To change WiFi (or Firebase) later:** In the web app dashboard, select the device and click **Reset device WiFi**. The device clears both WiFi and Firebase config from NVS and restarts in AP mode so you can enter a new network (and optionally new Firebase settings) at 192.168.4.1 again.
 
-### Firebase (portal or code)
+### Firebase (portal or optional secrets.h)
 
-**Option A – Portal:** At first WiFi setup (192.168.4.1) you can enter Firebase API Key, DB URL, and device user email/password. They are stored in NVS and used on every boot. No need to reflash for a different project.
+**Recommended – Portal:** At first WiFi setup (192.168.4.1) enter Firebase API Key, DB URL, and device user email/password. They are stored in NVS and used on every boot. No credentials in source code.
 
-**Option B – Compile-time:** Open `src/main.cpp` and set:
+**Optional – Pre-fill for development:** Copy `src/secrets.h.example` to `src/secrets.h` (gitignored) and fill in your values. The portal form will be pre-filled. Never commit `secrets.h`.
 
-```cpp
-#define API_KEY "YOUR_FIREBASE_WEB_API_KEY"
-#define DB_URL  "https://<your-project-id>.firebaseio.com/"
-
-const char *FIREBASE_USER_EMAIL = "YOUR_DEVICE_USER_EMAIL";
-const char *FIREBASE_USER_PASSWORD = "YOUR_DEVICE_USER_PASSWORD";
+```bash
+cp src/secrets.h.example src/secrets.h
+# Edit src/secrets.h with your Firebase credentials
 ```
 
 - **API_KEY**: Firebase Project → Project Settings → General → “Web API Key”.
 - **DB_URL**: Firebase Realtime Database URL, e.g. `https://your-project-id-default-rtdb.firebaseio.com/`
 - **FIREBASE_USER_EMAIL / FIREBASE_USER_PASSWORD**: Create a dedicated “device user” in Firebase Auth (Email/Password) or use your own during development.
-
-Optional: see **PLAN.md** for moving Firebase config into the WiFiManager portal so nothing is hardcoded.
 
 ### OTA (Over-the-air updates)
 
@@ -238,7 +233,7 @@ Output is in `frontend/dist/`. Serve with any static host or Firebase Hosting.
 
 ---
 
-## 9. Security note
+## 9. Security
 
-Do **not** commit real Wi‑Fi passwords or Firebase credentials to a public repo. For team projects, move secrets into a private `include/secrets.h` (gitignored) or CI secrets.
+Credentials are not stored in the repo. See **SECURITY.md** for credential handling and what to do if secrets were exposed in git history.
 # Plant-Monitor

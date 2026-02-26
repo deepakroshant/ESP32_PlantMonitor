@@ -18,6 +18,9 @@ export function ClaimDevicePage() {
   const [mac, setMac] = useState('')
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [justClaimedMac, setJustClaimedMac] = useState<string | null>(null)
+  const [claimName, setClaimName] = useState('')
+  const [claimRoom, setClaimRoom] = useState('')
   const [devices, setDevices] = useState<DeviceEntry[]>([])
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -51,13 +54,15 @@ export function ClaimDevicePage() {
       const userDevicesPath = `users/${user.uid}/devices/${normalized}`
       const existing = await get(ref(firebaseDb, userDevicesPath))
       if (existing.exists()) {
-        setSuccess('Device already claimed. Going to dashboard…')
-        setTimeout(() => navigate('/'), 1500); return
+        setSuccess('Device already claimed.')
+        setTimeout(() => navigate('/'), 1500)
+        return
       }
       await set(ref(firebaseDb, userDevicesPath), { claimedAt: Date.now() })
       await set(ref(firebaseDb, `deviceList/${normalized}/claimedBy`), user.uid)
-      setSuccess('Device claimed! Going to dashboard…')
-      setTimeout(() => navigate('/'), 1500)
+      setSuccess('Device claimed!')
+      setJustClaimedMac(normalized)
+      setMac('')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Claim failed')
     }
@@ -66,6 +71,18 @@ export function ClaimDevicePage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     await handleClaim(mac)
+  }
+
+  async function handleSaveNameAndGo() {
+    if (!user || !justClaimedMac) return
+    const meta = { name: claimName.trim() || undefined, room: claimRoom.trim() || undefined }
+    if (meta.name || meta.room) {
+      await set(ref(firebaseDb, `users/${user.uid}/devices/${justClaimedMac}/meta`), meta).catch(console.error)
+    }
+    setJustClaimedMac(null)
+    setClaimName('')
+    setClaimRoom('')
+    navigate('/')
   }
 
   const nowSec = Math.floor(Date.now() / 1000)
@@ -171,6 +188,37 @@ export function ClaimDevicePage() {
             </ul>
           )}
         </motion.section>
+
+        {/* Name your device (after claim) */}
+        {justClaimedMac && (
+          <motion.section
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="section-card mb-6 border-2 border-primary/20 bg-primary/5"
+          >
+            <p className="mb-4 text-sm font-medium text-primary">Give your device a friendly name (optional)</p>
+            <div className="mb-3 space-y-3">
+              <input
+                type="text"
+                value={claimName}
+                onChange={(e) => setClaimName(e.target.value)}
+                placeholder="e.g. Monstera by window"
+                className="input-field"
+                autoFocus
+              />
+              <input
+                type="text"
+                value={claimRoom}
+                onChange={(e) => setClaimRoom(e.target.value)}
+                placeholder="e.g. Living room"
+                className="input-field"
+              />
+            </div>
+            <button type="button" onClick={handleSaveNameAndGo} className="btn-primary">
+              Go to dashboard
+            </button>
+          </motion.section>
+        )}
 
         {/* Manual entry */}
         <motion.section

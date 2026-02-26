@@ -6,7 +6,7 @@
 
 ## 1. Project Overview
 
-**Smart Plant Pro** is a full-stack IoT plant monitoring system. An ESP32 microcontroller reads environmental sensors (temperature, soil moisture, light) and pushes real-time data to Firebase Realtime Database every 3 seconds. A React web dashboard displays live readings, device status, historical charts, and allows remote control of a water pump — all synced through Firebase.
+**Smart Plant Pro** is a full-stack IoT plant monitoring system. An ESP32 microcontroller reads environmental sensors (temperature, pressure, optional humidity, soil moisture, light) and pushes real-time data to Firebase Realtime Database every 5 seconds. A React web dashboard displays live readings, device status, historical charts, and allows remote control of a water pump — all synced through Firebase.
 
 ### High-level architecture
 
@@ -22,7 +22,7 @@
 
 ### Key principles
 - **Free tier only** — No Cloud Functions, no paid services. Everything runs on Firebase Spark (free) plan.
-- **Real-time** — 3-second sync interval; dashboard updates live via Firebase `onValue` listeners.
+- **Real-time** — 5-second sync interval; dashboard updates live via Firebase `onValue` listeners.
 - **No hardcoded WiFi** — WiFiManager captive portal for first-time setup; credentials stored in ESP32 NVS flash.
 - **FreeRTOS multitasking** — Three concurrent tasks on the ESP32's dual cores for sensors, Firebase sync, and pump control.
 
@@ -47,10 +47,12 @@
 **Sensors:**
 | Sensor | Pin | Type | What it measures |
 |--------|-----|------|-----------------|
-| BMP280 | I2C (SDA=33, SCL=32) | Temperature | Air temperature in °C |
+| BME280 or BMP280 | I2C (SDA=33, SCL=32) | Temp + Pressure (+ Humidity for BME280) | Auto-detected via chip ID (0x60=BME280, 0x58=BMP280); temp °C, pressure Pa |
 | Capacitive soil probe | GPIO 34 (ADC) | Soil moisture | Raw ADC 0–4095 (lower = wetter) |
 | LDR module | GPIO 35 (Digital) | Light | Bright (LOW) / Dim (HIGH) |
 | Relay | GPIO 25 | Output (active LOW) | Controls water pump on/off |
+
+**Sensor auto-detection:** On boot, firmware scans I2C 0x76/0x77, reads register 0xD0 (chip ID). BME280 (0x60) enables humidity; BMP280 (0x58) reads temp + pressure only. Fake BME280 clones that report invalid humidity are downgraded to BMP280.
 
 ### 2.2 Frontend (Web Dashboard)
 
@@ -85,11 +87,11 @@ The ESP32 has two CPU cores. Tasks are pinned to specific cores to avoid blockin
 Core 0                              Core 1
 ┌─────────────────────┐            ┌─────────────────────┐
 │ taskReadSensors     │            │ taskFirebaseSync    │
-│ (every 2s)          │            │ (every 3s)          │
-│ - Read BMP280 temp  │            │ - Push JSON to RTDB │
-│ - Read soil ADC     │  shared    │ - Update deviceList │
-│ - Read LDR          │◀─mutex──▶ │ - Write alerts      │
-│ - Write gState      │           │ - Push history (5m)  │
+│ (every 2s)          │            │ (every 5s)          │
+│ - Read BME/BMP280   │            │ - Update deviceList │
+│ - Read soil ADC     │  shared    │ - Write alerts      │
+│ - Read LDR          │◀─mutex──▶ │ - Push history (5m)  │
+│ - Write gState      │           │
 │ - Set gSensorReady  │            │ - Check reprovision │
 └─────────────────────┘            ├─────────────────────┤
                                    │ taskPumpControl     │
@@ -107,8 +109,8 @@ Core 0                              Core 1
 - **`gPumpRequest`** — Set by Firebase stream callback when the user taps "Water now" in the dashboard.
 
 ### Data flow (sensor → dashboard)
-1. `taskReadSensors` reads BMP280, soil ADC, LDR every 2 seconds → writes to `gState`
-2. `taskFirebaseSync` reads `gState` every 3 seconds → builds JSON → `Firebase.RTDB.updateNode()` to `devices/{MAC}/readings`
+1. `taskReadSensors` reads BME280/BMP280 (temp, pressure, humidity), soil ADC, LDR every 2 seconds → writes to `gState`
+2. `taskFirebaseSync` reads `gState` every 5 seconds → builds JSON → `Firebase.RTDB.updateNode()` to `devices/{MAC}/readings`
 3. Firebase RTDB stores the JSON
 4. React dashboard has `onValue(ref(firebaseDb, 'devices/{MAC}/readings'))` listener → state update → re-render
 
@@ -126,11 +128,13 @@ root/
 ├── devices/
 │   └── {MAC}/
 │       ├── readings/
-│       │   ├── temperature: 24.8         // °C from BMP280
+│       │   ├── temperature: 24.8         // °C from BME280/BMP280
+│       │   ├── pressure: 101325          // Pa (optional, from BME/BMP)
+│       │   ├── humidity: 45.2            // % (optional, BME280 only)
 │       │   ├── soilRaw: 2150             // ADC 0–4095
 │       │   ├── lightBright: true         // LDR digital
 │       │   ├── pumpRunning: false        // relay state
-│       │   ├── health: "OK"             // "OK" | "Overheat" | "Pump running, soil still dry"
+│       │   ├── health: "OK"             // "OK" | "Overheat" | "Pump running, soil still dry" | etc.
 │       │   ├── timestamp: 1738500000     // Unix epoch (NTP)
 │       │   ├── wifiSSID: "TELUS8180"     // connected network name
 │       │   └── wifiRSSI: -35             // signal strength dBm
@@ -152,9 +156,11 @@ root/
 │       │       └── ackAt: 1738499600     // set when user dismisses
 │       │
 │       └── history/
-│           └── {epoch}/                  // pushed every ~5 min
+│           └── {epoch}/                  // pushed every ~5 min (60 × 5s cycles)
 │               ├── t: 24.8              // temperature
 │               ├── s: 2150              // soilRaw
+│               ├── p: 101325            // pressure (optional)
+│               ├── h: 45.2              // humidity (optional)
 │               └── l: 1                 // light (1=bright, 0=dim)
 │
 └── users/
@@ -184,9 +190,9 @@ root/
 
 ```
 ESP32_PlantMonitor/
-├── platformio.ini                    # PlatformIO config (ESP32, libs, OTA settings)
+├── platformio.ini                    # PlatformIO config (ESP32, huge_app partition, libs)
 ├── src/
-│   └── main.cpp                      # ALL firmware code (~594 lines)
+│   └── main.cpp                      # ALL firmware code (~830 lines)
 │
 ├── frontend/                         # React web app (Vercel root directory)
 │   ├── package.json                  # Dependencies: react, firebase, recharts, framer-motion
@@ -199,13 +205,15 @@ ESP32_PlantMonitor/
 │   │   ├── index.css                 # Global styles, Tailwind layers, component classes
 │   │   │
 │   │   ├── lib/
-│   │   │   └── firebase.ts           # Firebase init from env vars (VITE_FIREBASE_*)
+│   │   │   ├── firebase.ts           # Firebase init from env vars (VITE_FIREBASE_*)
+│   │   │   └── motion.ts             # Framer Motion variants (fadeSlideUp, spring, accordionContent)
 │   │   │
 │   │   ├── context/
 │   │   │   └── AuthContext.tsx        # React context: signIn, signUp, signOut, user state
 │   │   │
 │   │   ├── utils/
-│   │   │   └── soil.ts               # soilStatus, soilRawToGauge, soilRawToGaugeCalibrated
+│   │   │   ├── soil.ts               # soilStatus, soilRawToGauge, soilRawToGaugeCalibrated
+│   │   │   └── deviceStatus.ts      # getDeviceStatus(), STATUS_META, formatSecondsAgo (6-state machine)
 │   │   │
 │   │   ├── pages/
 │   │   │   ├── LoginPage.tsx          # Email/pass login + signup, glassmorphism card
@@ -213,9 +221,15 @@ ESP32_PlantMonitor/
 │   │   │   └── DashboardPage.tsx      # Main dashboard (~1250 lines): sensors, status, charts, pump, profiles
 │   │   │
 │   │   └── components/
-│   │       ├── CircularGauge.tsx       # SVG circular gauge for soil moisture %
-│   │       ├── HistoryChart.tsx        # Recharts line chart (temp + soil, 6/12/24h range tabs)
+│   │       ├── CircularGauge.tsx        # SVG circular gauge for soil moisture %
+│   │       ├── CollapsibleSection.tsx  # Accordion-style expandable card (Target moisture, Calibration, etc.)
+│   │       ├── HistoryChart.tsx        # Recharts line chart (temp, soil, pressure, humidity; 6/12/24h tabs)
 │   │       ├── ProtectedRoute.tsx      # Auth guard + loading skeleton
+│   │       ├── dashboard/               # Dashboard subcomponents
+│   │       │   ├── DeviceStatusBar.tsx # Device selector, Reset WiFi, Live/Delayed/Offline badge
+│   │       │   ├── PlantHero.tsx       # Plant name, type, health + inline live readings (temp, soil, pressure, light)
+│   │       │   ├── SensorGrid.tsx      # Temp, Light, Soil gauge, Pressure, Humidity cards (dynamic)
+│   │       │   └── StatusBanners.tsx   # Synced, WiFi connecting, Delayed, Offline banners
 │   │       └── icons/                  # SVG icon components (Plant, Sun, Thermometer, etc.)
 │   │
 │   └── public/
@@ -234,19 +248,22 @@ ESP32_PlantMonitor/
 ### 6.1 Firmware Features
 | Feature | Description |
 |---------|-------------|
+| **BME280/BMP280 auto-detection** | Scans I2C 0x76/0x77; reads chip ID (0xD0); 0x60=BME280 (temp+pressure+humidity), 0x58=BMP280 (temp+pressure only). Boot diagnostic report printed. Fake BME280 clones with invalid humidity are downgraded to BMP280. |
 | **WiFiManager provisioning** | First boot creates AP "SmartPlantPro"; user connects and enters WiFi + optional Firebase creds via captive portal at 192.168.4.1 |
+| **Firebase credentials behind PIN** | WiFiManager portal shows only WiFi SSID/password by default; Firebase API key, DB URL, email, password hidden behind 4-digit PIN (1234) |
 | **Branded portal** | Custom CSS injection: green brand bar, plant emoji, styled buttons/inputs matching the web app theme |
-| **WiFi validation** | 3 connection retries with 15s timeout; portal stays open on failure instead of rebooting |
+| **WiFi validation** | 3 connection retries with 15s timeout; on failure: keep AP active, redirect to config page, show "Connection failed. Please check your password." Loading state during connection attempt |
 | **Firebase NVS storage** | API key, DB URL, email, password saved in ESP32 flash; survives reboots; cleared on re-provision |
 | **NTP time sync** | Real Unix epoch timestamps (not uptime); syncs from pool.ntp.org on boot |
 | **Sensor ready gate** | `gSensorReady` flag prevents pushing default/zero values before first real sensor read |
-| **Health monitoring** | Computes health string: "OK", "Overheat" (>45°C), "Pump running, soil still dry" |
+| **Health monitoring** | Computes health string: "OK", "Overheat" (>45°C), "Pump running, soil still dry", "Humidity high" (>95%) |
 | **Alert writing** | Writes `lastAlert` to RTDB when health != OK |
-| **History snapshots** | Pushes compact {t, s, l} JSON to `history/{epoch}` every ~5 minutes for charting |
+| **History snapshots** | Pushes compact {t, s, p, h, l} JSON to `history/{epoch}` every ~5 minutes (60 × 5s cycles) |
 | **WiFi info reporting** | Pushes `wifiSSID` and `wifiRSSI` with every sync for dashboard display |
-| **Remote re-provisioning** | Listens for `control/resetProvisioning` flag; clears NVS + WiFi, reboots to AP mode |
+| **Remote re-provisioning** | Listens for `control/resetProvisioning` flag; retries clearing flag in RTDB (5 attempts) before local reset; clears NVS + WiFi, reboots to AP mode. Prevents boot loop if Firebase write fails. |
 | **Pump control** | Stream listener for `pumpRequest`; pulse watering (1s on, 5s soak) until soil target reached |
-| **OTA updates** | ArduinoOTA enabled; set `upload_port` in platformio.ini to device IP for wireless flashing |
+| **Huge APP partition** | `huge_app.csv` (3 MB app slot) for flash headroom; USB upload default. OTA not supported without partition change |
+| **OTA updates** | ArduinoOTA code present; OTA upload not viable with huge_app partition (single app slot) |
 
 ### 6.2 Frontend Features
 | Feature | Description |
@@ -254,40 +271,43 @@ ESP32_PlantMonitor/
 | **Authentication** | Email/password sign-in and sign-up via Firebase Auth |
 | **Device discovery** | Lists all devices from `deviceList/`; shows online/offline/claimed/available status |
 | **Device claiming** | One-click claim from discovery list or manual MAC entry |
-| **6-state device status** | Live (green pulse), Delayed (amber), Offline (red), Syncing (blue), Resetting (amber), No data (grey) |
-| **Real-time sensor cards** | Temperature (°C), Soil moisture (circular gauge with %), Light (Bright/Dim) — all animate on update |
-| **Circular soil gauge** | SVG gauge with gradient color (red→amber→green based on %), supports user calibration |
+| **6-state device status** | Pure function `getDeviceStatus()`: Live, Delayed (12–30s), Offline (>30s), Syncing, WiFi_connected, No_data. Reset grace period (30s) ignores "last gasp" readings after Reset WiFi. |
+| **Reset flow UX** | `resetRequestedAt` persisted in localStorage (5 min expiry); immediate UI transition to syncing state; phased reconnection guide |
+| **Plant hero with live readings** | Plant name, type, health badge + inline quick stats: temp, soil raw, pressure (hPa), light — no scroll needed |
+| **Real-time sensor cards** | Temperature, Light, Soil (circular gauge), Pressure, Humidity (if BME280) — dynamic cards based on available data |
+| **Circular soil gauge** | SVG gauge with gradient color; supports user calibration |
 | **Soil calibration** | "Mark as dry" / "Mark as wet" buttons; gauge recalculates % based on user's actual sensor range |
-| **History chart** | Recharts line chart with temperature + soil raw; 6h/12h/24h range selector tabs |
+| **History chart** | Recharts line chart with temp, soil, pressure, humidity; 6h/12h/24h tabs; series toggle buttons; skeleton loading state |
+| **Collapsible accordion sections** | Target moisture, Calibrate soil, Plant profiles, Invite user — expand/collapse with animated chevron; reduced clutter |
 | **Target moisture slider** | Drag slider (0–4095) to set pump activation threshold; saved to RTDB |
 | **Manual pump control** | "Water now" button with 8s cooldown; live pump status indicator |
-| **Plant profiles** | Create/edit/delete named plant profiles (e.g., "Living Room Monstera", type: "Monstera") |
+| **Plant profiles** | Create/edit/delete named plant profiles; link to device |
 | **Example plants dropdown** | Preset plants (Mint/2000, Sunflower/2400, Herb/2200, Succulent/1800, Tomato/2600) auto-set type + target moisture |
-| **Device-profile linking** | Link a plant profile to a device; shows plant name/type in hero section |
 | **WiFi status display** | Shows connected SSID + RSSI when live; "Last WiFi: X" when stale/offline |
 | **Offline detection** | Stale after 12s (amber), offline after 30s (red); sensor cards blur + "Data frozen" overlay |
-| **Offline troubleshooting** | Banner with hints: "Check power supply", "Check WiFi range", "Try resetting WiFi" |
-| **Reset WiFi flow** | Button sends `resetProvisioning` to RTDB; 5-step guided reconnection flow; phased sync detection |
+| **Offline troubleshooting** | Banner with hints: "Check power", "Check WiFi range", "Try resetting WiFi" |
 | **Alert display** | Shows last alert with timestamp and "Dismiss" button (writes `ackAt`) |
-| **Browser notifications** | Toggle switch; uses Notification API to show native OS notification when health drops |
-| **Pro tips** | Context-aware tips (e.g., "Temperature above 28°C, consider adjusting moisture target") |
+| **Browser notifications** | Toggle switch; uses Notification API when health drops (tab must be open) |
+| **Pro tips** | Context-aware tips (e.g., temperature above 28°C) |
 | **Invite users** | Copy app URL; add emails to invite list |
-| **Loading skeleton** | Branded loading screen while auth state resolves |
+| **Design system** | Kombai-inspired: spring physics, Framer Motion variants, reduced whitespace, tighter card padding |
+| **Loading skeleton** | Branded loading screen; history chart shimmer bars |
 | **Responsive design** | Mobile-first; works on phones, tablets, desktops |
 
 ### 6.3 Design System
 | Token | Value | Usage |
 |-------|-------|-------|
-| Primary (green) | `#22C55E` (+ scale 50–800) | Buttons, badges, active states |
-| Forest (dark green) | `#14332A` | Text, dark accents |
-| Mint | `#ECFDF5` | Light green backgrounds |
-| Terracotta (red) | `#EF4444` | Alerts, errors, offline states |
-| Surface | `#F7FAF8` | Page background |
+| Primary (green) | `#3B7A57` (+ scale 50–900) | Buttons, badges, active states, soil chart line |
+| Forest (dark green) | `#1B2F27` | Text, dark accents |
+| Mint / Sage | `#EDF3EF`, sage-50–400 | Light green backgrounds |
+| Terracotta (red) | `#DC4A4A` | Alerts, errors, offline states |
+| Surface | `#FAFBFA` | Page background |
 | Font: sans | Inter | Body text |
 | Font: display | Plus Jakarta Sans | Headings, large numbers |
 | Font: mono | JetBrains Mono | MAC addresses, code |
-| Cards | Glassmorphism (blur + white/80 + subtle border) | All content cards |
-| Animations | Framer Motion (fade-in, slide-up, scale) | Page transitions, card mounts |
+| Cards | Glassmorphism (blur + white/92 + subtle border); section-card 1rem padding, 1.25rem radius | All content cards |
+| Sensor cards | .sensor-card with hover lift (shadow + border color) | Sensor grid items |
+| Animations | Framer Motion spring presets (gentle, snappy), fadeSlideUp, accordionContent | Page transitions, accordion expand/collapse |
 
 ---
 
@@ -306,14 +326,14 @@ ESP32_PlantMonitor/
 9. Sensors begin reading; after first real read, Firebase sync starts pushing
 ```
 
-### 7.2 Normal operation loop (every 3 seconds)
+### 7.2 Normal operation loop (every 5 seconds)
 ```
 ESP32:
   taskReadSensors → read BMP280/soil/LDR → update gState (mutex)
   taskFirebaseSync → read gState (mutex) → build JSON → HTTPS PUT to Firebase RTDB
     → also: update deviceList/{MAC}/lastSeen
     → also: if health != OK → write alerts/lastAlert
-    → also: every 100 cycles (~5 min) → push to history/{epoch}
+    → also: every 60 cycles (~5 min) → push to history/{epoch}
 
 Dashboard (React):
   onValue listener fires → setReadings(data) → React re-renders
@@ -348,14 +368,12 @@ Dashboard (React):
 
 ## 8. Environment & Configuration
 
-### 8.1 Firmware (compile-time defaults in main.cpp)
-```cpp
-#define API_KEY "AIzaSyCZBClU2J2bV9b3Tm9uvuPteQhNF0nwJQ4"
-#define DB_URL  "https://esw-plantmonitor-default-rtdb.firebaseio.com/"
-const char *FIREBASE_USER_EMAIL = "deepakroshan73@gmail.com";
-const char *FIREBASE_USER_PASSWORD = "123456";
-```
-These are overridden by NVS values if the user enters custom Firebase credentials in the WiFiManager portal.
+### 8.1 Firmware (Firebase credentials)
+Credentials are **not** hardcoded. Defaults in `src/firebase_defaults.h` are empty. Users must enter Firebase API key, DB URL, email, and password via the WiFiManager portal (192.168.4.1) on first setup; values are stored in ESP32 NVS.
+
+For local development, copy `src/secrets.h.example` to `src/secrets.h` (gitignored) and fill in your values to pre-fill the portal form. Never commit `secrets.h`.
+
+**Important:** If credentials were previously exposed in git history, rotate the Firebase API key in [Google Cloud Console](https://console.cloud.google.com/apis/credentials) and revoke/regenerate the user password in Firebase Auth.
 
 ### 8.2 Frontend (environment variables)
 The React app reads from `frontend/.env.local` (not committed to git):
@@ -376,11 +394,13 @@ These same values must be set in Vercel's Environment Variables for production b
 platform = espressif32
 board = esp32dev
 framework = arduino
+board_build.partitions = huge_app.csv   ; 3 MB app slot, no OTA partition; USB upload default
 monitor_speed = 115200
 lib_deps = 
     adafruit/Adafruit Unified Sensor@^1.1.9
     adafruit/Adafruit BusIO@^1.14.5
     adafruit/Adafruit BMP280 Library@^2.6.6
+    adafruit/Adafruit BME280 Library@^2.2.4
     https://github.com/mobizt/Firebase-ESP-Client.git
     tzapu/WiFiManager@^2.0.16
 ```
@@ -392,10 +412,11 @@ lib_deps =
 | Parameter | Value | Where |
 |-----------|-------|-------|
 | Sensor read interval | 2 seconds | `SENSOR_READ_INTERVAL_MS` in main.cpp |
-| Firebase sync interval | 3 seconds | `FIREBASE_SYNC_INTERVAL_MS` in main.cpp |
-| History snapshot interval | ~5 minutes (100 cycles × 3s) | `histCycles >= 100` in main.cpp |
-| Frontend stale threshold | 12 seconds | `isStale = secondsAgo > 12` in DashboardPage.tsx |
-| Frontend offline threshold | 30 seconds | `isOffline = secondsAgo > 30` in DashboardPage.tsx |
+| Firebase sync interval | 5 seconds | `FIREBASE_SYNC_INTERVAL_MS` in main.cpp |
+| History snapshot interval | ~5 minutes (60 cycles × 5s) | `histCycles >= 60` in main.cpp |
+| Frontend stale threshold | 12 seconds | `getDeviceStatus()` in deviceStatus.ts |
+| Frontend offline threshold | 30 seconds | `getDeviceStatus()` in deviceStatus.ts |
+| Reset grace period | 30 seconds | `RESET_GRACE_SEC` in deviceStatus.ts — ignores readings until device fully reconnects |
 | Frontend status tick | 2 seconds | `setInterval` in DashboardPage.tsx |
 | Pump pulse duration | 1 second on | `PUMP_PULSE_MS` in main.cpp |
 | Pump soak duration | 5 seconds off | `PUMP_SOAK_MS` in main.cpp |
@@ -428,17 +449,16 @@ Push to both: `git push personal main && git push origin main`
 
 ## 11. Current State & Known Limitations
 
-### What's done (22/22 planned items complete)
-All items from PLAN.md are implemented except two that require paid services or hardware changes:
-- Per-device auth (needs Cloud Functions → paid billing)
-- Multi-slot (needs additional hardware: multiple soil probes + relays)
+### What's done
+All core features from PLAN.md implemented. Recent additions: BME280/BMP280 auto-detection, pressure/humidity in dashboard and chart, deterministic 6-state device status, collapsible accordion settings, inline live readings on plant card, WiFiManager PIN for Firebase creds, reset flow fixes, huge_app partition for flash headroom.
 
-### Flash usage
-- **RAM:** 16.8% (55 KB / 328 KB)
-- **Flash:** 97.1% (1.27 MB / 1.31 MB) — tight; future features may need partition table changes
+### Flash usage (with huge_app partition)
+- **Partition:** huge_app.csv — ~3 MB for app (vs ~1.25 MB default)
+- **RAM:** Similar to before (~16–20%)
+- **Flash:** Much more headroom; allows future features without partition changes
 
 ### Known limitations
-1. **Flash is nearly full (97%)** — Adding significant new firmware features may require switching to a larger partition scheme or optimizing the Firebase-ESP-Client library usage.
+1. **Flash (mitigated)** — huge_app partition provides ~3 MB; sufficient for current feature set. OTA updates disabled with this partition.
 2. **Single Firebase user for device auth** — All ESP32 devices share one Firebase email/password. Proper per-device tokens would require Cloud Functions (paid).
 3. **No push notifications when dashboard is closed** — Browser Notification API only works when the tab is open. True background push would need a Service Worker + FCM (which needs Cloud Functions for the server key).
 4. **History data grows unbounded** — The `history/` node accumulates forever. A cleanup mechanism (e.g., client-side deletion of entries older than 7 days) should be added.
@@ -462,7 +482,7 @@ All items from PLAN.md are implemented except two that require paid services or 
 4. **Frontend:** `cd frontend && cp .env.example .env.local` → fill Firebase config → `npm install && npm run dev`
 5. **Web login:** Sign up at the login page
 6. **Claim device:** Go to "Add device" → device appears in list → click "Claim"
-7. **Dashboard:** Live data appears within 3 seconds
+7. **Dashboard:** Live data appears within 5 seconds
 
 ---
 
@@ -478,8 +498,58 @@ All items from PLAN.md are implemented except two that require paid services or 
 | Recharts over Chart.js | Better React integration, tree-shakeable, composable API |
 | Tailwind over CSS modules | Faster iteration, consistent design tokens, responsive utilities built-in |
 | Vercel over Firebase Hosting | Zero-config React deploys, automatic HTTPS, preview deployments on PR |
-| 3s sync interval | Near-real-time feel; well within Firebase free tier limits (~0.5 GB/month); no ESP32 performance impact |
+| 5s sync interval | Near-real-time feel; well within Firebase free tier limits; balances responsiveness with load |
 | `gSensorReady` gate | Prevents dashboard from briefly showing 0°C / 0% when device first boots |
+
+---
+
+## 14. Future Improvements & More Functionality
+
+Ideas to extend the project, organized by area:
+
+### 14.1 Firmware
+| Idea | Effort | Notes |
+|------|--------|-------|
+| **OTA firmware updates** | Medium | Switch partition back to dual-app; add UI trigger in dashboard to start OTA; serve firmware from Firebase Storage or simple HTTP server |
+| **Multi-slot soil sensing** | High | Extra ADC pins + relays for multiple plants per device; needs hardware and schema changes |
+| **Low-power sleep mode** | Medium | Deep sleep between syncs for battery operation; wake on timer or external interrupt |
+| **Calibration flow on device** | Low | Simple button/LED sequence to mark dry/wet instead of only via dashboard |
+| **Configurable sync interval** | Low | Store interval in NVS; user sets 3s / 5s / 10s via portal or dashboard |
+| **Per-device Firebase auth** | High | Needs Cloud Functions to mint custom tokens; paid tier |
+
+### 14.2 Frontend / UX
+| Idea | Effort | Notes |
+|------|--------|-------|
+| **Dark mode** | Low | Add `prefers-color-scheme` or manual toggle; update design tokens |
+| **Multi-language (i18n)** | Medium | Add react-i18next or similar; extract strings |
+| **Plant care tips** | Low | Show watering/sunlight hints per plant type from profile |
+| **Export data (CSV/JSON)** | Low | Download history for a device as file |
+| **Dashboard widgets / layout** | Medium | Drag-and-drop or preset layouts (compact vs. spaced) |
+| **Notification scheduling** | Medium | "Notify me at 8am if soil is dry" — needs client-side scheduling or Cloud Functions |
+| **PWA / offline support** | Medium | Service worker for cached dashboard; show last known data when offline |
+| **Mobile app (React Native / Flutter)** | High | Same Firebase backend; native push notifications |
+
+### 14.3 Data & Analytics
+| Idea | Effort | Notes |
+|------|--------|-------|
+| **History cleanup** | Low | Client script or scheduled job to delete `history/{epoch}` older than 7 days |
+| **Aggregated stats** | Medium | Daily min/max/avg for temp, soil; show "trend" badges |
+| **Watering log** | Low | Log each pump activation with timestamp; show in history |
+| **Plant growth journal** | Medium | Optional photo + note per plant profile; store in Firebase Storage |
+
+### 14.4 Integrations
+| Idea | Effort | Notes |
+|------|--------|-------|
+| **Webhook on alert** | Medium | Post to user-defined URL when health != OK; needs Cloud Functions or client-side fetch |
+| **Home Assistant / MQTT** | High | Bridge Firebase → MQTT for smart home integration |
+| **Google Home / Alexa** | High | Custom action for "water my plant" via voice |
+
+### 14.5 Security & Scale
+| Idea | Effort | Notes |
+|------|--------|-------|
+| **Tighten Firebase rules** | Low | Per-uid device access; validated structure |
+| **Rate limiting** | Medium | Prevent abuse of pump/alert writes; Firebase rules or Cloud Functions |
+| **Audit log** | Medium | Log claim, reset, pump actions for each device |
 
 ---
 
