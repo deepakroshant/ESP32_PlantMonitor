@@ -397,6 +397,9 @@ export function DashboardPage() {
             ? `${Math.floor(secondsAgo / 3600)} h ago`
             : `${Math.floor(secondsAgo / 86400)} d ago`
 
+  const awaitingPostResetData = resetRequestedAt > 0 && (readings?.timestamp ?? 0) <= resetRequestedAt
+  const dataUntrusted = isOffline || awaitingPostResetData
+
   return (
     <div className="min-h-screen bg-surface p-4 md:p-6">
       <div className="mx-auto max-w-4xl">
@@ -586,8 +589,28 @@ export function DashboardPage() {
             )}
 
             {!resetFlowActive && (<>
+            {/* Syncing banner: device is on WiFi but we haven't received post-reset data yet */}
+            {resetRequestedAt > 0 && (readings?.timestamp ?? 0) <= resetRequestedAt && readings?.wifiSSID && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4 flex items-center gap-3 rounded-[24px] border border-primary/30 bg-primary/5 px-5 py-4"
+              >
+                <span className="relative flex h-3 w-3 shrink-0">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/40" />
+                  <span className="relative inline-flex h-3 w-3 rounded-full bg-primary" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-forest">Connected to WiFi — syncing device data…</p>
+                  <p className="text-xs text-forest/60">
+                    The device is online and will send fresh sensor readings in a few seconds.
+                  </p>
+                </div>
+              </motion.div>
+            )}
+
             {/* Offline banner */}
-            {isOffline && (
+            {isOffline && !(resetRequestedAt > 0 && readings?.wifiSSID) && (
               <motion.div
                 initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -649,9 +672,9 @@ export function DashboardPage() {
               </div>
               <div className="shrink-0 text-right">
                 <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-forest/70 sm:text-xs">Overall health</p>
-                {isOffline ? (
+                {dataUntrusted ? (
                   <span className="inline-block rounded-full border-2 border-forest/15 bg-forest/5 px-4 py-2 text-sm font-semibold text-forest/40 sm:px-5 sm:py-2.5 sm:text-base">
-                    Offline
+                    {awaitingPostResetData ? 'Syncing' : 'Offline'}
                   </span>
                 ) : (
                   <span
@@ -686,9 +709,9 @@ export function DashboardPage() {
             <motion.div
               key={`gauges-${selectedMac}`}
               initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: isOffline ? 0.45 : 1, y: 0 }}
+              animate={{ opacity: dataUntrusted ? 0.45 : 1, y: 0 }}
               transition={{ duration: 0.3, delay: 0.05 }}
-              className={`grid gap-4 sm:grid-cols-2 lg:grid-cols-3 ${isOffline ? 'pointer-events-none select-none grayscale-[30%]' : ''}`}
+              className={`grid gap-4 sm:grid-cols-2 lg:grid-cols-3 ${dataUntrusted ? 'pointer-events-none select-none grayscale-[30%]' : ''}`}
             >
               <div className="rounded-[32px] bg-white p-5 shadow-card">
                 <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-mint">

@@ -89,6 +89,7 @@ SensorState gState{};
 SemaphoreHandle_t gStateMutex;
 SemaphoreHandle_t gFirebaseMutex;
 volatile bool gPumpRequest = false;
+volatile bool gSensorReady = false;
 
 // -----------------------------------------------------------------------------
 // Sensor objects
@@ -337,6 +338,7 @@ void taskReadSensors(void *pv) {
 
     if (xSemaphoreTake(gStateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
       gState = local;
+      gSensorReady = true;
       xSemaphoreGive(gStateMutex);
     }
 
@@ -363,6 +365,11 @@ String healthStatus(const SensorState &s) {
 
 void taskFirebaseSync(void *pv) {
   const TickType_t period = pdMS_TO_TICKS(FIREBASE_SYNC_INTERVAL_MS);
+
+  // Wait for the sensor task to produce at least one real reading
+  while (!gSensorReady) {
+    vTaskDelay(pdMS_TO_TICKS(200));
+  }
 
   while (true) {
     SensorState s{};
