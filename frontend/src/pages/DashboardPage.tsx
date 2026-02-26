@@ -21,6 +21,8 @@ type Readings = {
   pumpRunning?: boolean
   health?: string
   timestamp?: number
+  wifiSSID?: string
+  wifiRSSI?: number
 }
 
 type PlantProfile = { name: string; type: string; createdAt: number }
@@ -295,8 +297,9 @@ export function DashboardPage() {
   }
 
   async function handleResetDeviceWiFi() {
-    if (!selectedMac) return
+    if (!selectedMac || resetFlowActive) return
     await set(ref(firebaseDb, `devices/${selectedMac}/control/resetProvisioning`), true).catch(console.error)
+    setReadings(null)
     setResetFlowActive(true)
   }
 
@@ -454,43 +457,117 @@ export function DashboardPage() {
                   type="button"
                   onClick={handleResetDeviceWiFi}
                   disabled={resetFlowActive}
-                  className="rounded-2xl border border-terracotta/30 bg-terracotta/10 px-3 py-2 text-xs font-medium text-terracotta transition hover:bg-terracotta/20 disabled:opacity-50"
+                  className={`rounded-2xl border px-3 py-2 text-xs font-medium transition ${
+                    resetFlowActive
+                      ? 'cursor-not-allowed border-forest/10 bg-forest/5 text-forest/30'
+                      : 'border-terracotta/30 bg-terracotta/10 text-terracotta hover:bg-terracotta/20'
+                  }`}
                   title="Device will clear its WiFi config and restart in AP mode so you can enter a new network"
                 >
-                  Reset device WiFi
+                  {resetFlowActive ? 'Reset sent' : 'Reset device WiFi'}
                 </button>
+              </div>
+              {/* WiFi connection status */}
+              <div className="mt-2 flex items-center gap-2">
+                {readings?.wifiSSID && !isOffline ? (
+                  <>
+                    <span className="inline-flex h-2 w-2 rounded-full bg-primary" />
+                    <span className="text-xs text-forest/70">
+                      Connected to <strong className="font-medium text-forest">{readings.wifiSSID}</strong>
+                      {readings.wifiRSSI != null && (
+                        <span className="ml-1 text-forest/40">({readings.wifiRSSI} dBm)</span>
+                      )}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="inline-flex h-2 w-2 rounded-full bg-terracotta" />
+                    <span className="text-xs text-terracotta/80">Not connected to WiFi</span>
+                  </>
+                )}
               </div>
             </div>
 
-            {/* Reset WiFi provisioning flow */}
+            {/* Reset WiFi: full-page provisioning guide replaces dashboard content */}
             {resetFlowActive && (
               <motion.div
-                initial={{ opacity: 0, y: -8 }}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="mb-4 rounded-[24px] border-2 border-amber-300 bg-amber-50 p-5"
+                className="rounded-[32px] bg-white p-6 shadow-card sm:p-8"
               >
-                <div className="mb-2 flex items-center justify-between">
-                  <p className="text-sm font-semibold text-amber-800">Reconnecting device…</p>
-                  <button
-                    type="button"
-                    onClick={() => setResetFlowActive(false)}
-                    className="rounded-xl px-2 py-0.5 text-xs text-amber-600 transition hover:bg-amber-100"
-                  >
-                    Dismiss
-                  </button>
+                <div className="mb-5 flex items-center gap-3">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100">
+                    <svg className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.14 0M1.394 9.393c5.857-5.858 15.355-5.858 21.213 0" /></svg>
+                  </span>
+                  <div>
+                    <h2 className="text-lg font-semibold text-forest">Device WiFi reset</h2>
+                    <p className="text-sm text-forest/60">Your device is restarting into setup mode</p>
+                  </div>
                 </div>
-                <ol className="ml-4 list-decimal space-y-1 text-sm text-amber-900/80">
-                  <li>The device is restarting into AP mode (takes ~10 s).</li>
-                  <li>On your phone or laptop, connect to the <strong>SmartPlantPro</strong> WiFi network.</li>
-                  <li>A portal should open automatically. If not, go to <strong>192.168.4.1</strong> in a browser.</li>
-                  <li>Choose your WiFi network, enter password, and (optionally) Firebase credentials.</li>
-                  <li>After saving, the device will connect and data will reappear here.</li>
+
+                <p className="mb-4 text-sm text-forest/70">
+                  No data will appear here until the device reconnects to WiFi. Follow these steps to reconfigure it:
+                </p>
+
+                <ol className="mb-6 space-y-4">
+                  <li className="flex gap-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">1</span>
+                    <div>
+                      <p className="text-sm font-medium text-forest">Wait ~10 seconds</p>
+                      <p className="text-xs text-forest/60">The device is clearing its WiFi config and restarting into AP mode.</p>
+                    </div>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">2</span>
+                    <div>
+                      <p className="text-sm font-medium text-forest">Connect to <span className="font-mono text-primary">SmartPlantPro</span> WiFi</p>
+                      <p className="text-xs text-forest/60">Open WiFi settings on your phone or laptop and connect to the SmartPlantPro network.</p>
+                    </div>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">3</span>
+                    <div>
+                      <p className="text-sm font-medium text-forest">Open the setup portal</p>
+                      <p className="text-xs text-forest/60">A captive portal should open automatically. If not, go to <strong className="font-mono">192.168.4.1</strong> in a browser.</p>
+                    </div>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">4</span>
+                    <div>
+                      <p className="text-sm font-medium text-forest">Choose WiFi and save</p>
+                      <p className="text-xs text-forest/60">Select your WiFi network, enter the password, and optionally fill Firebase credentials. Hit Save.</p>
+                    </div>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">5</span>
+                    <div>
+                      <p className="text-sm font-medium text-forest">Reconnect to your own WiFi</p>
+                      <p className="text-xs text-forest/60">Switch back to your home WiFi. The dashboard will update automatically once the device connects.</p>
+                    </div>
+                  </li>
                 </ol>
+
+                <div className="flex items-center gap-3 rounded-2xl bg-surface px-4 py-3">
+                  <span className="relative flex h-3 w-3">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+                    <span className="relative inline-flex h-3 w-3 rounded-full bg-amber-500" />
+                  </span>
+                  <p className="text-sm text-forest/70">Waiting for device to reconnect…</p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setResetFlowActive(false)}
+                  className="mt-4 rounded-2xl border border-forest/10 bg-white px-4 py-2 text-sm font-medium text-forest/60 transition hover:bg-mint/30 hover:text-forest"
+                >
+                  Dismiss and show dashboard
+                </button>
               </motion.div>
             )}
 
+            {!resetFlowActive && (<>
             {/* Offline banner */}
-            {isOffline && !resetFlowActive && (
+            {isOffline && (
               <motion.div
                 initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -820,6 +897,7 @@ export function DashboardPage() {
                 </ul>
               )}
             </motion.section>
+            </>)}
           </>
         )}
 

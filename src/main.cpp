@@ -381,6 +381,8 @@ void taskFirebaseSync(void *pv) {
       json.set("pumpRunning", s.pumpRunning);
       json.set("health", healthStatus(s));
       json.set("timestamp", (int)time(nullptr));
+      json.set("wifiSSID", WiFi.SSID());
+      json.set("wifiRSSI", WiFi.RSSI());
 
       if (!Firebase.RTDB.updateNode(&fbClient, readingsPath().c_str(), &json)) {
         Serial.print("RTDB update failed: ");
