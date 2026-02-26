@@ -43,7 +43,7 @@ const char *FIREBASE_USER_PASSWORD = "123456";
 // Timing and defaults
 // -----------------------------------------------------------------------------
 static constexpr uint32_t SENSOR_READ_INTERVAL_MS   = 2000;   // 2 s
-static constexpr uint32_t FIREBASE_SYNC_INTERVAL_MS = 3000;   // 3 s
+static constexpr uint32_t FIREBASE_SYNC_INTERVAL_MS = 5000;   // 5 s
 static constexpr TickType_t PUMP_PULSE_MS  = pdMS_TO_TICKS(1000);
 static constexpr TickType_t PUMP_SOAK_MS   = pdMS_TO_TICKS(5000);
 static constexpr TickType_t PUMP_IDLE_MS   = pdMS_TO_TICKS(500);
@@ -295,7 +295,7 @@ void setup() {
   // Run networking/Firebase work on Core 1 so the Core 0 idle task
   // can still run and avoid watchdog resets even if SSL blocks.
   xTaskCreatePinnedToCore(taskReadSensors,  "taskReadSensors",  4096, nullptr, 1, nullptr, 0);
-  xTaskCreatePinnedToCore(taskFirebaseSync, "taskFirebaseSync", 6144, nullptr, 1, nullptr, 1);
+  xTaskCreatePinnedToCore(taskFirebaseSync, "taskFirebaseSync", 8192, nullptr, 1, nullptr, 1);
   xTaskCreatePinnedToCore(taskPumpControl,  "taskPumpControl",  4096, nullptr, 1, nullptr, 1);
 }
 
@@ -426,10 +426,13 @@ String healthStatus(const SensorState &s) {
 void taskFirebaseSync(void *pv) {
   const TickType_t period = pdMS_TO_TICKS(FIREBASE_SYNC_INTERVAL_MS);
 
-  // Wait for the sensor task to produce at least one real reading
+  Serial.println("[Sync] Waiting for first sensor reading...");
   while (!gSensorReady) {
     vTaskDelay(pdMS_TO_TICKS(200));
   }
+  Serial.println("[Sync] Sensor ready, starting sync loop.");
+
+  static unsigned long syncCount = 0;
 
   while (true) {
     SensorState s{};
@@ -438,7 +441,14 @@ void taskFirebaseSync(void *pv) {
       xSemaphoreGive(gStateMutex);
     }
 
-    if (Firebase.ready() && xSemaphoreTake(gFirebaseMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+    bool fbReady = Firebase.ready();
+    if (!fbReady) {
+      Serial.println("[Sync] Firebase not ready, skipping this cycle.");
+      vTaskDelay(period);
+      continue;
+    }
+
+    if (xSemaphoreTake(gFirebaseMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
       FirebaseJson json;
       if (!isnan(s.temperatureC)) {
         json.set("temperature", s.temperatureC);
@@ -452,8 +462,14 @@ void taskFirebaseSync(void *pv) {
       json.set("wifiRSSI", WiFi.RSSI());
 
       if (!Firebase.RTDB.updateNode(&fbClient, readingsPath().c_str(), &json)) {
-        Serial.print("RTDB update failed: ");
+        Serial.print("[Sync] RTDB update FAILED: ");
         Serial.println(fbClient.errorReason());
+      } else {
+        syncCount++;
+        if (syncCount <= 5 || syncCount % 20 == 0) {
+          Serial.printf("[Sync] Push #%lu OK | temp=%.1f soil=%u light=%d ts=%d\n",
+            syncCount, s.temperatureC, s.soilRaw, s.lightBright, (int)time(nullptr));
+        }
       }
       // So the app can list "available" devices and show online status
       String deviceListPath = "deviceList/" + deviceId + "/lastSeen";
@@ -471,9 +487,9 @@ void taskFirebaseSync(void *pv) {
         Firebase.RTDB.updateNode(&fbClient, alertPath.c_str(), &alertJson);
       }
 
-      // History: push a compact snapshot every ~5 min (100 cycles × 3 s)
+      // History: push a compact snapshot every ~5 min (60 cycles × 5 s)
       static int histCycles = 0;
-      if (++histCycles >= 100) {
+      if (++histCycles >= 60) {
         histCycles = 0;
         String histPath = "devices/" + deviceId + "/history/" + String((int)time(nullptr));
         FirebaseJson hj;

@@ -455,8 +455,8 @@ export function DashboardPage() {
   const lastSeenSec = readings?.timestamp ?? 0
   const tsLooksValid = lastSeenSec > 1577836800
   const secondsAgo = tsLooksValid ? nowSec - lastSeenSec : Infinity
-  const isStale = secondsAgo > 12
-  const isOffline = secondsAgo > 30
+  const isStale = secondsAgo > 15
+  const isOffline = secondsAgo > 35
   const lastUpdated = readings?.timestamp != null && tsLooksValid
     ? new Date(readings.timestamp * 1000).toLocaleTimeString()
     : null
