@@ -8,7 +8,9 @@ export function ThemeToggleIcon() {
     <button
       type="button"
       onClick={toggleDark}
-      className="flex items-center gap-1.5 rounded-xl border border-forest/15 bg-white/60 px-2.5 py-2 text-forest/60 transition hover:bg-white hover:text-forest dark:border-slate-600 dark:bg-amber-500/20 dark:text-amber-300 dark:hover:bg-amber-500/30 dark:hover:text-amber-200"
+      className="flex items-center gap-2 rounded-xl border-2 px-3 py-2.5 font-semibold shadow-lg transition-all hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2
+        border-amber-400/60 bg-amber-50 text-amber-800
+        dark:border-amber-500/70 dark:bg-amber-500/90 dark:text-amber-950"
       aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
       title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
     >
@@ -21,7 +23,7 @@ export function ThemeToggleIcon() {
           <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
         </svg>
       )}
-      <span className="hidden text-xs font-medium sm:inline">{isDark ? 'Light' : 'Dark'}</span>
+      <span className="text-sm">{isDark ? 'Light mode' : 'Dark mode'}</span>
     </button>
   )
 }

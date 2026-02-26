@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ProtectedRoute } from './components/ProtectedRoute'
+import { ThemeToggleIcon } from './components/icons/ThemeToggleIcon'
 import { LoginPage } from './pages/LoginPage'
 import { ClaimDevicePage } from './pages/ClaimDevicePage'
 import { DashboardPage } from './pages/DashboardPage'
@@ -43,6 +44,10 @@ function App() {
   return (
     <BrowserRouter>
       <AnimatedRoutes />
+      {/* Floating theme toggle - always visible so users can switch light/dark mode */}
+      <div className="fixed bottom-4 right-4 z-40">
+        <ThemeToggleIcon />
+      </div>
     </BrowserRouter>
   )
 }

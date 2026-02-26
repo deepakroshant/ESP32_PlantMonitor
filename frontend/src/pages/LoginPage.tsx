@@ -4,7 +4,6 @@ import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { fadeSlideUp, staggerContainer, transition } from '../lib/motion'
 import { PlantIcon } from '../components/icons/PlantIcon'
-import { ThemeToggleIcon } from '../components/icons/ThemeToggleIcon'
 
 export function LoginPage() {
   const [email, setEmail] = useState('')
@@ -34,9 +33,6 @@ export function LoginPage() {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-surface px-4 py-12 dark:bg-forest-900">
-      <div className="absolute right-4 top-4">
-        <ThemeToggleIcon />
-      </div>
       {/* Decorative ambient light */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
         <div className="absolute -left-32 -top-32 h-[420px] w-[420px] rounded-full bg-primary/[.04] blur-3xl" />

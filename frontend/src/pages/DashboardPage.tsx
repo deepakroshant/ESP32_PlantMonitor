@@ -10,7 +10,6 @@ import { getDeviceStatus, STATUS_META, formatSecondsAgo } from '../utils/deviceS
 import type { Readings, PlantProfile, DeviceStatus, DeviceMeta, WateringSchedule } from '../types'
 import { LogoutIcon } from '../components/icons/LogoutIcon'
 import { PlusIcon } from '../components/icons/PlusIcon'
-import { ThemeToggleIcon } from '../components/icons/ThemeToggleIcon'
 import { PlantIcon } from '../components/icons/PlantIcon'
 import { PencilIcon } from '../components/icons/PencilIcon'
 import { HistoryChart } from '../components/HistoryChart'
@@ -498,7 +497,7 @@ export function DashboardPage() {
           animate="visible"
           className="mb-7 flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-forest/[0.06] bg-white/80 px-4 py-3 shadow-card backdrop-blur-md sm:px-6 sm:py-4 dark:border-slate-600/50 dark:bg-slate-800/90"
         >
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <div
               className="flex h-9 w-9 items-center justify-center rounded-xl shadow-sm"
               style={{ background: 'linear-gradient(135deg, #4a9b6d 0%, #2f6347 65%, #1c3d2c 100%)' }}
@@ -508,7 +507,6 @@ export function DashboardPage() {
             <h1 className="font-display text-lg font-bold tracking-tight text-forest dark:text-slate-100 sm:text-xl">Smart Plant Pro</h1>
           </div>
           <div className="flex items-center gap-2">
-            <ThemeToggleIcon />
             {user && (
               <div className="hidden items-center gap-2 rounded-xl border border-forest/5 bg-surface px-3 py-1.5 sm:flex">
                 <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
@@ -763,30 +761,30 @@ export function DashboardPage() {
                 <CollapsibleSection title="Device diagnostics" subtitle={diagnostics ? `Uptime ${diagnostics.uptimeSec != null ? `${Math.floor((diagnostics.uptimeSec ?? 0) / 60)}m` : '—'}` : 'Waiting…'}>
                   <p className="mb-4 text-sm text-forest-400 dark:text-forest-300">Firmware-reported stats for troubleshooting.</p>
                   {diagnostics ? (
-                    <div className="overflow-hidden rounded-xl border border-forest/10 dark:border-forest/20">
+                    <div className="overflow-hidden rounded-xl border border-forest/12 shadow-sm dark:border-slate-600/50">
                       <table className="w-full text-sm" role="grid">
                         <thead>
-                          <tr className="border-b border-forest/10 bg-surface/80 dark:border-forest/20 dark:bg-forest-800/50">
-                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-forest/50 dark:text-forest-400">Metric</th>
-                            <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-forest/50 dark:text-forest-400">Value</th>
+                          <tr className="border-b border-forest/15 bg-sage-50/80 dark:border-slate-500/40 dark:bg-slate-800/80">
+                            <th className="px-4 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-forest dark:text-slate-300">Metric</th>
+                            <th className="px-4 py-3.5 text-right text-xs font-bold uppercase tracking-wider text-forest dark:text-slate-300">Value</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-forest/5 dark:divide-forest/15">
+                        <tbody className="divide-y divide-forest/10 dark:divide-slate-600/40">
                           {diagnostics.uptimeSec != null && (
-                            <tr className="hover:bg-forest/[0.02] dark:hover:bg-forest-800/30">
-                              <td className="px-4 py-2.5 text-forest-500 dark:text-forest-400">Uptime</td>
-                              <td className="px-4 py-2.5 text-right font-mono font-semibold text-forest dark:text-forest-200">{Math.floor(diagnostics.uptimeSec / 60)} min</td>
+                            <tr className="hover:bg-sage-50/50 dark:hover:bg-slate-700/30">
+                              <td className="px-4 py-2.5 text-forest-500 dark:text-slate-400">Uptime</td>
+                              <td className="px-4 py-2.5 text-right font-mono font-semibold text-forest dark:text-slate-200">{Math.floor(diagnostics.uptimeSec / 60)} min</td>
                             </tr>
                           )}
                           {diagnostics.lastSyncAt != null && (
-                            <tr className="hover:bg-forest/[0.02] dark:hover:bg-forest-800/30">
-                              <td className="px-4 py-2.5 text-forest-500 dark:text-forest-400">Last sync</td>
-                              <td className="px-4 py-2.5 text-right font-mono font-semibold text-forest dark:text-forest-200">{new Date(diagnostics.lastSyncAt * 1000).toLocaleTimeString()}</td>
+                            <tr className="hover:bg-sage-50/50 dark:hover:bg-slate-700/30">
+                              <td className="px-4 py-2.5 text-forest-500 dark:text-slate-400">Last sync</td>
+                              <td className="px-4 py-2.5 text-right font-mono font-semibold text-forest dark:text-slate-200">{new Date(diagnostics.lastSyncAt * 1000).toLocaleTimeString()}</td>
                             </tr>
                           )}
                           {diagnostics.syncSuccessCount != null && (
-                            <tr className="hover:bg-forest/[0.02] dark:hover:bg-forest-800/30">
-                              <td className="px-4 py-2.5 text-forest-500 dark:text-forest-400">Sync success</td>
+                            <tr className="hover:bg-sage-50/50 dark:hover:bg-slate-700/30">
+                              <td className="px-4 py-2.5 text-forest-500 dark:text-slate-400">Sync success</td>
                               <td className="px-4 py-2.5 text-right font-mono font-semibold text-green-600 dark:text-green-400">{diagnostics.syncSuccessCount}</td>
                             </tr>
                           )}
@@ -797,9 +795,9 @@ export function DashboardPage() {
                             </tr>
                           )}
                           {diagnostics.wifiRSSI != null && (
-                            <tr className="hover:bg-forest/[0.02] dark:hover:bg-forest-800/30">
-                              <td className="px-4 py-2.5 text-forest-500 dark:text-forest-400">WiFi RSSI</td>
-                              <td className="px-4 py-2.5 text-right font-mono font-semibold text-forest dark:text-forest-200">{diagnostics.wifiRSSI} dBm</td>
+                            <tr className="hover:bg-sage-50/50 dark:hover:bg-slate-700/30">
+                              <td className="px-4 py-2.5 text-forest-500 dark:text-slate-400">WiFi RSSI</td>
+                              <td className="px-4 py-2.5 text-right font-mono font-semibold text-forest dark:text-slate-200">{diagnostics.wifiRSSI} dBm</td>
                             </tr>
                           )}
                         </tbody>
@@ -813,33 +811,33 @@ export function DashboardPage() {
                 <CollapsibleSection title="Watering log" subtitle={waterLog.length > 0 ? `${waterLog.length} event${waterLog.length !== 1 ? 's' : ''}` : 'No events yet'}>
                   <p className="mb-4 text-sm text-forest-400 dark:text-forest-300">Recent watering events from pump control.</p>
                   {waterLog.length > 0 ? (
-                    <div className="overflow-x-auto -mx-1">
+                    <div className="overflow-x-auto -mx-1 rounded-xl border border-forest/12 shadow-sm dark:border-slate-600/50">
                       <table className="w-full min-w-[420px] text-sm" role="grid">
                         <thead>
-                          <tr className="border-b border-forest/10 dark:border-forest/20">
-                            <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-forest/50 dark:text-forest-400">Date & time</th>
-                            <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-forest/50 dark:text-forest-400">Reason</th>
-                            <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-forest/50 dark:text-forest-400">Duration</th>
-                            <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-forest/50 dark:text-forest-400">Soil before</th>
-                            <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-forest/50 dark:text-forest-400">Soil after</th>
+                          <tr className="border-b border-forest/15 bg-sage-50/80 dark:border-slate-500/40 dark:bg-slate-800/80">
+                            <th className="px-4 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-forest dark:text-slate-300">Date & time</th>
+                            <th className="px-4 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-forest dark:text-slate-300">Reason</th>
+                            <th className="px-4 py-3.5 text-right text-xs font-bold uppercase tracking-wider text-forest dark:text-slate-300">Duration</th>
+                            <th className="px-4 py-3.5 text-right text-xs font-bold uppercase tracking-wider text-forest dark:text-slate-300">Soil before</th>
+                            <th className="px-4 py-3.5 text-right text-xs font-bold uppercase tracking-wider text-forest dark:text-slate-300">Soil after</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-forest/5 dark:divide-forest/15">
+                        <tbody className="divide-y divide-forest/10 dark:divide-slate-600/40">
                           {[...waterLog].reverse().map((e) => (
-                            <tr key={e.epoch} className="hover:bg-forest/[0.02] dark:hover:bg-forest-800/30">
-                              <td className="px-3 py-2 font-medium text-forest dark:text-forest-200">
+                            <tr key={e.epoch} className="hover:bg-sage-50/50 dark:hover:bg-slate-700/30">
+                              <td className="px-4 py-3 font-medium text-forest dark:text-slate-200">
                                 {new Date(e.epoch * 1000).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
                               </td>
-                              <td className="px-3 py-2">
+                              <td className="px-4 py-3">
                                 <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
                                   e.reason === 'schedule' ? 'bg-primary/15 text-primary dark:bg-primary/25 dark:text-primary-300' : 'bg-forest/10 text-forest-500 dark:bg-forest-700 dark:text-forest-400'
                                 }`}>
                                   {e.reason === 'schedule' ? 'Schedule' : 'Manual'}
                                 </span>
                               </td>
-                              <td className="px-3 py-2 text-right font-mono text-forest-600 dark:text-forest-300">{(e.durationMs / 1000).toFixed(1)}s</td>
-                              <td className="px-3 py-2 text-right font-mono text-forest-600 dark:text-forest-300">{e.soilBefore}</td>
-                              <td className="px-3 py-2 text-right font-mono font-medium text-primary dark:text-primary-300">{e.soilAfter}</td>
+                              <td className="px-4 py-3 text-right font-mono text-forest-600 dark:text-slate-300">{(e.durationMs / 1000).toFixed(1)}s</td>
+                              <td className="px-4 py-3 text-right font-mono text-forest-600 dark:text-slate-300">{e.soilBefore}</td>
+                              <td className="px-4 py-3 text-right font-mono font-medium text-primary dark:text-primary-300">{e.soilAfter}</td>
                             </tr>
                           ))}
                         </tbody>

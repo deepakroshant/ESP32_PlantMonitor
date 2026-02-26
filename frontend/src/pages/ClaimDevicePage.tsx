@@ -5,7 +5,6 @@ import { ref, set, get, onValue } from 'firebase/database'
 import { firebaseDb } from '../lib/firebase'
 import { useAuth } from '../context/AuthContext'
 import { fadeSlideUp, staggerContainer, transition } from '../lib/motion'
-import { ThemeToggleIcon } from '../components/icons/ThemeToggleIcon'
 
 const ONLINE_THRESHOLD_SEC = 2 * 60
 
@@ -110,7 +109,6 @@ export function ClaimDevicePage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <ThemeToggleIcon />
             <button type="button" onClick={() => navigate('/')} className="btn-ghost">
               Dashboard
             </button>

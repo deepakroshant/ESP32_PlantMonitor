@@ -10,7 +10,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
 } from 'recharts'
 
 type HistoryEntry = {
@@ -107,7 +106,7 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
   if (loading) {
     return (
       <div className="section-card mt-3">
-        <p className="stat-label mb-3">Readings history</p>
+        <h3 className="mb-3 text-base font-bold text-forest dark:text-slate-100">Readings history</h3>
         <div className="h-48 space-y-3 overflow-hidden">
           {[72, 88, 60, 80, 56].map((w, i) => (
             <div
@@ -124,7 +123,7 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
   if (raw.length === 0) {
     return (
       <div className="section-card mt-3">
-        <p className="stat-label mb-3">Readings history</p>
+        <h3 className="mb-3 text-base font-bold text-forest dark:text-slate-100">Readings history</h3>
         <div className="flex h-32 items-center justify-center">
           <p className="text-sm text-forest/35 text-center px-4">
             No history data yet. The device records a snapshot every ~5 minutes.
@@ -138,9 +137,9 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
 
   return (
     <div className="section-card mt-3">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="stat-label">Readings history</p>
-        <div className="flex gap-0.5 rounded-xl bg-surface p-1 shadow-inner dark:bg-forest-800/50">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-forest/8 pb-4 dark:border-slate-600/40">
+        <h3 className="text-lg font-bold tracking-tight text-forest dark:text-slate-100">Readings history</h3>
+        <div className="flex gap-1 rounded-xl bg-sage-100/80 p-1 dark:bg-slate-700/60">
           {RANGES.map((r, i) => (
             <button
               key={r.label}
@@ -158,9 +157,9 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
         </div>
       </div>
 
-      {/* Series toggles */}
+      {/* Series toggles - acts as legend */}
       {availableSeries.length > 2 && (
-        <div className="mb-4 flex flex-wrap gap-1.5">
+        <div className="mb-4 flex flex-wrap gap-2">
           {availableSeries.map((key) => {
             const meta = SERIES_META[key]
             const active = visibleSeries[key]
@@ -191,8 +190,8 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
           <p className="text-sm text-forest/40">No data in the last {hours} hours.</p>
         </div>
       ) : (
-        <ResponsiveContainer width="100%" height={280}>
-          <LineChart data={data} margin={{ top: 8, right: showPressureAxis ? 60 : 12, bottom: 4, left: -8 }}>
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={data} margin={{ top: 16, right: showPressureAxis ? 80 : 20, bottom: 12, left: 8 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={isDark ? 'rgba(148,163,184,0.2)' : 'rgba(20,51,42,0.06)'} />
             <XAxis
               dataKey="time"
@@ -205,31 +204,31 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
             <YAxis
               yAxisId="temp"
               orientation="left"
-              tick={{ fontSize: 11, fill: isDark ? 'rgba(203,213,225,0.9)' : 'rgba(20,51,42,0.4)' }}
+              tick={{ fontSize: 11, fill: isDark ? 'rgba(203,213,225,0.9)' : 'rgba(20,51,42,0.5)' }}
               axisLine={false}
               tickLine={false}
-              width={40}
-              label={{ value: '°C', position: 'insideTopLeft', offset: 0, style: { fontSize: 10, fill: isDark ? 'rgba(203,213,225,0.8)' : 'rgba(20,51,42,0.35)' } }}
+              width={44}
+              label={{ value: '°C', position: 'insideTopLeft', offset: 2, style: { fontSize: 10, fontWeight: 500, fill: isDark ? 'rgba(203,213,225,0.85)' : 'rgba(20,51,42,0.5)' } }}
             />
             <YAxis
               yAxisId="soil"
               orientation="right"
-              tick={{ fontSize: 11, fill: isDark ? 'rgba(203,213,225,0.9)' : 'rgba(20,51,42,0.4)' }}
+              tick={{ fontSize: 10, fill: isDark ? 'rgba(203,213,225,0.9)' : 'rgba(20,51,42,0.5)' }}
               axisLine={false}
               tickLine={false}
-              width={48}
-              label={{ value: 'Soil raw', position: 'insideTopRight', offset: 0, style: { fontSize: 10, fill: isDark ? 'rgba(203,213,225,0.8)' : 'rgba(20,51,42,0.35)' } }}
+              width={52}
+              label={{ value: 'Soil', position: 'insideTopRight', offset: showPressureAxis ? 28 : 2, style: { fontSize: 10, fontWeight: 500, fill: isDark ? 'rgba(203,213,225,0.85)' : 'rgba(20,51,42,0.5)' } }}
             />
             {showPressureAxis && (
               <YAxis
                 yAxisId="pressure"
                 orientation="right"
-                tick={{ fontSize: 10, fill: isDark ? 'rgba(129,140,248,0.9)' : 'rgba(99,102,241,0.5)' }}
+                tick={{ fontSize: 10, fill: isDark ? 'rgba(129,140,248,0.9)' : 'rgba(99,102,241,0.6)' }}
                 axisLine={false}
                 tickLine={false}
-                width={50}
+                width={52}
                 domain={['dataMin - 2', 'dataMax + 2']}
-                label={{ value: 'hPa', position: 'insideTopRight', offset: 8, style: { fontSize: 10, fill: isDark ? 'rgba(129,140,248,0.85)' : 'rgba(99,102,241,0.45)' } }}
+                label={{ value: 'hPa', position: 'insideTopRight', offset: 2, style: { fontSize: 10, fontWeight: 500, fill: isDark ? 'rgba(129,140,248,0.9)' : 'rgba(99,102,241,0.6)' } }}
               />
             )}
             <Tooltip
@@ -252,14 +251,6 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
                 return [formatted, meta.label]
               }}
             />
-            <Legend
-              wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
-              formatter={(v: string) => SERIES_META[v as SeriesKey]?.label ?? v}
-              iconType="circle"
-              iconSize={8}
-              style={isDark ? { color: 'rgba(203,213,225,0.9)' } : undefined}
-            />
-
             {visibleSeries.temperature && (
               <Line yAxisId="temp" type="monotone" dataKey="temperature" stroke="#F59E0B" strokeWidth={2} dot={false} activeDot={{ r: 3, fill: '#F59E0B' }} connectNulls />
             )}
