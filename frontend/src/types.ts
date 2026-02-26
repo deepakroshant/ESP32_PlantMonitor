@@ -1,5 +1,7 @@
 export type Readings = {
   temperature?: number
+  pressure?: number
+  humidity?: number
   soilRaw?: number
   lightBright?: boolean
   pumpRunning?: boolean

@@ -1,10 +1,10 @@
 /**
  * Smart Plant Pro – Firebase RTDB Node
- * ESP32 plant monitor with BMP280 temperature, soil sensor, LDR and relay-controlled
- * water pump. Three FreeRTOS tasks:
- *  - taskReadSensors  (Core 1, 5 s): update shared SensorState.
- *  - taskFirebaseSync (Core 0, 10 s): push SensorState + health to RTDB.
- *  - taskPumpControl  (Core 0): listen for pumpRequest and run pulse watering.
+ * ESP32 plant monitor with auto-detected BME280/BMP280, soil sensor, LDR and
+ * relay-controlled water pump. Three FreeRTOS tasks:
+ *  - taskReadSensors  (Core 0, 2 s): update shared SensorState.
+ *  - taskFirebaseSync (Core 1, 5 s): push SensorState + health to RTDB.
+ *  - taskPumpControl  (Core 1): listen for pumpRequest and run pulse watering.
  */
 
 #include <Arduino.h>
@@ -15,6 +15,7 @@
 #include <Preferences.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BMP280.h>
+#include <Adafruit_BME280.h>
 #include <Firebase_ESP_Client.h>
 
 // -----------------------------------------------------------------------------
@@ -22,7 +23,7 @@
 // -----------------------------------------------------------------------------
 static constexpr uint8_t I2C_SDA_PIN      = 33;
 static constexpr uint8_t I2C_SCL_PIN      = 32;
-static constexpr uint8_t BMP280_I2C_ADDR  = 0x77;
+// BME280/BMP280 address detected at runtime (0x76 or 0x77)
 static constexpr uint8_t SOIL_SENSOR_PIN  = 34;  // ADC
 static constexpr uint8_t LIGHT_SENSOR_PIN = 35;  // Digital
 static constexpr uint8_t RELAY_PIN        = 25;  // Active LOW: LOW = pump ON
@@ -80,6 +81,8 @@ String deviceId;  // WiFi.macAddress()
 // -----------------------------------------------------------------------------
 struct SensorState {
   float    temperatureC;
+  float    pressurePa;
+  float    humidity;       // NAN when sensor is BMP280
   uint16_t soilRaw;
   bool     lightBright;
   bool     pumpRunning;
@@ -92,15 +95,22 @@ volatile bool gPumpRequest = false;
 volatile bool gSensorReady = false;
 
 // -----------------------------------------------------------------------------
-// Sensor objects
+// Sensor detection and objects
 // -----------------------------------------------------------------------------
+enum SensorType { SENSOR_NONE, SENSOR_BMP280, SENSOR_BME280 };
+
+SensorType gSensorType = SENSOR_NONE;
+uint8_t    gSensorAddr = 0;
+uint8_t    gChipId     = 0;
+
 Adafruit_BMP280 bmp;
-bool bmp280Found = false;
+Adafruit_BME280 bme;
 
 // -----------------------------------------------------------------------------
 // Forward declarations
 // -----------------------------------------------------------------------------
 void initializeHardware();
+void printSensorDiagnostic();
 void taskReadSensors(void *pv);
 void taskFirebaseSync(void *pv);
 void taskPumpControl(void *pv);
@@ -413,19 +423,104 @@ void initializeHardware() {
   Wire.setClock(100000);
   delay(200);
 
-  if (bmp.begin(BMP280_I2C_ADDR)) {
-    float t = bmp.readTemperature();
-    if (!isnan(t) && t > -50 && t < 100) {
-      bmp280Found = true;
+  // Scan I2C for a Bosch sensor at 0x76 or 0x77, read chip ID register 0xD0
+  const uint8_t candidates[] = {0x76, 0x77};
+  for (uint8_t addr : candidates) {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() != 0) continue;
+
+    Wire.beginTransmission(addr);
+    Wire.write(0xD0);
+    Wire.endTransmission(false);
+    Wire.requestFrom(addr, (uint8_t)1);
+
+    if (!Wire.available()) continue;
+    uint8_t chipId = Wire.read();
+    gChipId = chipId;
+    gSensorAddr = addr;
+
+    if (chipId == 0x60) {
+      gSensorType = SENSOR_BME280;
+    } else if (chipId == 0x58) {
+      gSensorType = SENSOR_BMP280;
+    } else {
+      Serial.printf("Unknown sensor at 0x%02X, chip ID 0x%02X\n", addr, chipId);
+      continue;
     }
+    break;
   }
-  if (!bmp280Found) {
-    Serial.println("BMP280 not found at 0x77. Check wiring.");
+
+  if (gSensorType == SENSOR_NONE) {
+    Serial.println("Unknown sensor or I2C communication issue.");
   }
+
+  // Initialize the matching Adafruit library
+  bool libOk = false;
+  if (gSensorType == SENSOR_BME280) {
+    libOk = bme.begin(gSensorAddr, &Wire);
+  } else if (gSensorType == SENSOR_BMP280) {
+    libOk = bmp.begin(gSensorAddr);
+  }
+  if (!libOk && gSensorType != SENSOR_NONE) {
+    Serial.println("Sensor detected via chip ID but library init failed. Check wiring/power.");
+    gSensorType = SENSOR_NONE;
+  }
+
+  printSensorDiagnostic();
 
   pinMode(LIGHT_SENSOR_PIN, INPUT_PULLUP);
   pinMode(SOIL_SENSOR_PIN, INPUT);
-  digitalWrite(RELAY_PIN, HIGH); // OFF
+  digitalWrite(RELAY_PIN, HIGH);
+}
+
+// -----------------------------------------------------------------------------
+// Boot diagnostic report
+// -----------------------------------------------------------------------------
+void printSensorDiagnostic() {
+  Serial.println("\n===== Smart Plant Sensor Check =====");
+
+  if (gSensorType == SENSOR_NONE) {
+    Serial.println("No supported sensor detected.");
+    Serial.println("====================================\n");
+    return;
+  }
+
+  Serial.printf("I2C Address: 0x%02X\n", gSensorAddr);
+  Serial.printf("Chip ID:     0x%02X\n", gChipId);
+  Serial.printf("Detected:    %s\n",
+    gSensorType == SENSOR_BME280 ? "BME280" : "BMP280");
+
+  float t = NAN, p = NAN, h = NAN;
+  if (gSensorType == SENSOR_BME280) {
+    t = bme.readTemperature();
+    p = bme.readPressure();
+    h = bme.readHumidity();
+  } else {
+    t = bmp.readTemperature();
+    p = bmp.readPressure();
+  }
+
+  bool anyBad = false;
+  bool tempOk = !isnan(t) && t >= -20.0f && t <= 60.0f;
+  bool pressOk = !isnan(p) && p >= 80000.0f && p <= 110000.0f;
+
+  Serial.printf("Temperature: %.1f C (%s)\n", t, tempOk ? "OK" : "BAD");
+  Serial.printf("Pressure:    %.0f Pa (%s)\n", p, pressOk ? "OK" : "BAD");
+  if (!tempOk || !pressOk) anyBad = true;
+
+  if (gSensorType == SENSOR_BME280) {
+    bool humOk = !isnan(h) && h > 0.0f && h <= 100.0f;
+    Serial.printf("Humidity:    %.1f %% (%s)\n", h, humOk ? "OK" : "BAD");
+    if (!humOk) anyBad = true;
+  } else {
+    Serial.println("Humidity:    N/A (BMP280)");
+  }
+
+  if (anyBad) {
+    Serial.println("Sensor values invalid. Possible wiring, power, or fake sensor issue.");
+  }
+
+  Serial.println("====================================\n");
 }
 
 // -----------------------------------------------------------------------------
@@ -434,13 +529,58 @@ void initializeHardware() {
 void taskReadSensors(void *pv) {
   const TickType_t period = pdMS_TO_TICKS(SENSOR_READ_INTERVAL_MS);
 
+  // Fake BME280 clone detection: first N readings with humidity always bad → downgrade
+  static constexpr int HUM_CHECK_WINDOW = 5;
+  int humCheckCount = 0;
+  int humBadCount   = 0;
+
   while (true) {
     SensorState local{};
+    local.humidity = NAN;
+    local.pressurePa = NAN;
 
-    if (bmp280Found) {
+    if (gSensorType == SENSOR_BME280) {
+      local.temperatureC = bme.readTemperature();
+      local.pressurePa   = bme.readPressure();
+      local.humidity      = bme.readHumidity();
+    } else if (gSensorType == SENSOR_BMP280) {
       local.temperatureC = bmp.readTemperature();
+      local.pressurePa   = bmp.readPressure();
     } else {
       local.temperatureC = NAN;
+    }
+
+    // Fake BME280 clone fallback: humidity stuck at 0, 100, or NaN
+    if (gSensorType == SENSOR_BME280 && humCheckCount < HUM_CHECK_WINDOW) {
+      humCheckCount++;
+      if (isnan(local.humidity) || local.humidity <= 0.0f || local.humidity >= 100.0f) {
+        humBadCount++;
+      }
+      if (humCheckCount >= HUM_CHECK_WINDOW && humBadCount >= HUM_CHECK_WINDOW) {
+        Serial.println("WARNING: BME280 humidity always invalid — likely a BMP280 clone.");
+        Serial.println("         Downgrading to BMP280 mode (humidity disabled).");
+        gSensorType = SENSOR_BMP280;
+        // Re-init with BMP280 library; BME280 lib reads are still valid for temp/pressure
+        // but future reads will use the BMP280 object if we can init it.
+        if (bmp.begin(gSensorAddr)) {
+          Serial.println("         BMP280 library re-initialized OK.");
+        }
+        local.humidity = NAN;
+      }
+    }
+
+    // Sanity validation
+    bool tempBad  = isnan(local.temperatureC) || local.temperatureC < -20.0f || local.temperatureC > 60.0f;
+    bool pressBad = isnan(local.pressurePa) || local.pressurePa < 80000.0f || local.pressurePa > 110000.0f;
+    bool humBad   = (gSensorType == SENSOR_BME280) &&
+                    (isnan(local.humidity) || local.humidity < 0.0f || local.humidity > 100.0f);
+
+    if (gSensorType != SENSOR_NONE && (tempBad || pressBad || humBad)) {
+      static unsigned long lastWarn = 0;
+      if (millis() - lastWarn > 30000) {
+        Serial.println("Sensor values invalid. Possible wiring, power, or fake sensor issue.");
+        lastWarn = millis();
+      }
     }
 
     local.soilRaw = analogRead(SOIL_SENSOR_PIN);
@@ -470,6 +610,9 @@ String healthStatus(const SensorState &s) {
   }
   if (!isnan(s.temperatureC) && s.temperatureC > 45.0f) {
     return "Overheat";
+  }
+  if (!isnan(s.humidity) && s.humidity > 95.0f) {
+    return "High humidity";
   }
   return "OK";
 }
@@ -504,6 +647,12 @@ void taskFirebaseSync(void *pv) {
       if (!isnan(s.temperatureC)) {
         json.set("temperature", s.temperatureC);
       }
+      if (!isnan(s.pressurePa)) {
+        json.set("pressure", s.pressurePa);
+      }
+      if (!isnan(s.humidity)) {
+        json.set("humidity", s.humidity);
+      }
       json.set("soilRaw", s.soilRaw);
       json.set("lightBright", s.lightBright);
       json.set("pumpRunning", s.pumpRunning);
@@ -518,8 +667,9 @@ void taskFirebaseSync(void *pv) {
       } else {
         syncCount++;
         if (syncCount <= 5 || syncCount % 20 == 0) {
-          Serial.printf("[Sync] Push #%lu OK | temp=%.1f soil=%u light=%d ts=%d\n",
-            syncCount, s.temperatureC, s.soilRaw, s.lightBright, (int)time(nullptr));
+          Serial.printf("[Sync] Push #%lu OK | temp=%.1f pres=%.0f hum=%.1f soil=%u light=%d ts=%d\n",
+            syncCount, s.temperatureC, s.pressurePa, s.humidity,
+            s.soilRaw, s.lightBright, (int)time(nullptr));
         }
       }
       // So the app can list "available" devices and show online status
@@ -545,6 +695,8 @@ void taskFirebaseSync(void *pv) {
         String histPath = "devices/" + deviceId + "/history/" + String((int)time(nullptr));
         FirebaseJson hj;
         if (!isnan(s.temperatureC)) hj.set("t", s.temperatureC);
+        if (!isnan(s.pressurePa))   hj.set("p", s.pressurePa);
+        if (!isnan(s.humidity))     hj.set("h", s.humidity);
         hj.set("s", s.soilRaw);
         hj.set("l", s.lightBright ? 1 : 0);
         Firebase.RTDB.setJSON(&fbClient, histPath.c_str(), &hj);
@@ -553,18 +705,31 @@ void taskFirebaseSync(void *pv) {
       xSemaphoreGive(gFirebaseMutex);
     }
 
-    // Re-provisioning: app set devices/<MAC>/control/resetProvisioning = true → clear WiFi, reboot
+    // Re-provisioning: app set devices/<MAC>/control/resetProvisioning = true → clear WiFi, reboot.
+    // CRITICAL: clear the flag in Firebase BEFORE resetting, otherwise the device
+    // will find it still true on next boot and enter an infinite reset loop.
     if (Firebase.ready() && fetchResetProvisioning()) {
       String path = "devices/" + deviceId + "/control/resetProvisioning";
-      if (xSemaphoreTake(gFirebaseMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
-        Firebase.RTDB.setBool(&fbClient, path.c_str(), false);
-        xSemaphoreGive(gFirebaseMutex);
+      bool cleared = false;
+      for (int attempt = 1; attempt <= 5 && !cleared; attempt++) {
+        if (xSemaphoreTake(gFirebaseMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+          cleared = Firebase.RTDB.setBool(&fbClient, path.c_str(), false);
+          xSemaphoreGive(gFirebaseMutex);
+        }
+        if (!cleared) {
+          Serial.printf("[Reset] Failed to clear resetProvisioning (attempt %d/5)\n", attempt);
+          vTaskDelay(pdMS_TO_TICKS(500));
+        }
       }
-      Serial.println("Re-provision requested: clearing WiFi and Firebase NVS, restarting...");
-      clearFirebaseNVS();
-      wm.resetSettings();
-      delay(500);
-      ESP.restart();
+      if (!cleared) {
+        Serial.println("[Reset] Could not clear flag in Firebase — skipping reset to avoid boot loop.");
+      } else {
+        Serial.println("[Reset] Flag cleared. Clearing WiFi and Firebase NVS, restarting...");
+        clearFirebaseNVS();
+        wm.resetSettings();
+        delay(500);
+        ESP.restart();
+      }
     }
 
     vTaskDelay(period);

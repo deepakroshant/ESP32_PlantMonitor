@@ -1,5 +1,10 @@
 import type { Readings, DeviceStatus } from '../types'
 
+// After a reset request the device needs time to: receive the flag (~5s sync),
+// clear it, reboot, and enter AP mode.  Any readings arriving within this
+// window are "last-gasp" data from the pre-reset device — ignore them.
+const RESET_GRACE_SEC = 30
+
 export function getDeviceStatus(
   readings: Readings | null,
   nowSec: number,
@@ -12,7 +17,8 @@ export function getDeviceStatus(
   const tsValid = ts > 1577836800
 
   if (resetRequestedAt > 0) {
-    const isPostReset = tsValid && ts > resetRequestedAt
+    // Readings must be well after the reset request to be considered genuine
+    const isPostReset = tsValid && ts > resetRequestedAt + RESET_GRACE_SEC
     if (!isPostReset) return 'syncing'
     if (!readings.wifiSSID) return 'syncing'
     const hasSensors = readings.temperature != null && !Number.isNaN(readings.temperature)

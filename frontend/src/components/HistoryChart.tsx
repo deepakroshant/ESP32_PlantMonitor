@@ -12,7 +12,22 @@ import {
   Legend,
 } from 'recharts'
 
-type HistoryEntry = { time: number; temperature: number | null; soilRaw: number }
+type HistoryEntry = {
+  time: number
+  temperature: number | null
+  soilRaw: number
+  pressure: number | null
+  humidity: number | null
+}
+
+type SeriesKey = 'temperature' | 'soilRaw' | 'pressure' | 'humidity'
+
+const SERIES_META: Record<SeriesKey, { label: string; color: string; unit: string; yAxisId: string }> = {
+  temperature: { label: 'Temperature', color: '#F59E0B', unit: '°C', yAxisId: 'temp' },
+  soilRaw:     { label: 'Soil raw',    color: '#22C55E', unit: '',   yAxisId: 'soil' },
+  pressure:    { label: 'Pressure',    color: '#6366F1', unit: ' hPa', yAxisId: 'pressure' },
+  humidity:    { label: 'Humidity',    color: '#06B6D4', unit: '%',  yAxisId: 'temp' },
+}
 
 const RANGES = [
   { label: '6 h', hours: 6 },
@@ -27,8 +42,14 @@ function formatTime(epoch: number): string {
 
 export function HistoryChart({ deviceMac }: { deviceMac: string }) {
   const [raw, setRaw] = useState<HistoryEntry[]>([])
-  const [rangeIdx, setRangeIdx] = useState(2) // default 24 h
+  const [rangeIdx, setRangeIdx] = useState(2)
   const [loading, setLoading] = useState(true)
+  const [visibleSeries, setVisibleSeries] = useState<Record<SeriesKey, boolean>>({
+    temperature: true,
+    soilRaw: true,
+    pressure: true,
+    humidity: true,
+  })
 
   useEffect(() => {
     if (!deviceMac) return
@@ -50,6 +71,8 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
           time: Number(key),
           temperature: typeof v.t === 'number' ? v.t : null,
           soilRaw: typeof v.s === 'number' ? v.s : 0,
+          pressure: typeof v.p === 'number' ? Math.round(v.p / 100 * 10) / 10 : null,
+          humidity: typeof v.h === 'number' ? v.h : null,
         }))
         .sort((a, b) => a.time - b.time)
       setRaw(entries)
@@ -63,6 +86,20 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
     const cutoff = Math.floor(Date.now() / 1000) - hours * 3600
     return raw.filter((e) => e.time >= cutoff)
   }, [raw, hours])
+
+  const hasPressure = raw.some((e) => e.pressure != null)
+  const hasHumidity = raw.some((e) => e.humidity != null)
+
+  const availableSeries: SeriesKey[] = useMemo(() => {
+    const s: SeriesKey[] = ['temperature', 'soilRaw']
+    if (hasPressure) s.push('pressure')
+    if (hasHumidity) s.push('humidity')
+    return s
+  }, [hasPressure, hasHumidity])
+
+  function toggleSeries(key: SeriesKey) {
+    setVisibleSeries((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
 
   if (loading) {
     return (
@@ -88,6 +125,8 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
     )
   }
 
+  const showPressureAxis = hasPressure && visibleSeries.pressure
+
   return (
     <div className="section-card mt-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -110,13 +149,41 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
         </div>
       </div>
 
+      {/* Series toggles */}
+      {availableSeries.length > 2 && (
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {availableSeries.map((key) => {
+            const meta = SERIES_META[key]
+            const active = visibleSeries[key]
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => toggleSeries(key)}
+                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
+                  active
+                    ? 'bg-white text-forest shadow-sm'
+                    : 'text-forest/30 hover:text-forest/50'
+                }`}
+              >
+                <span
+                  className="inline-block h-2 w-2 rounded-full"
+                  style={{ backgroundColor: active ? meta.color : 'rgba(20,51,42,0.15)' }}
+                />
+                {meta.label}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       {data.length === 0 ? (
         <div className="flex h-32 items-center justify-center">
           <p className="text-sm text-forest/40">No data in the last {hours} hours.</p>
         </div>
       ) : (
-        <ResponsiveContainer width="100%" height={260}>
-          <LineChart data={data} margin={{ top: 8, right: 12, bottom: 4, left: -8 }}>
+        <ResponsiveContainer width="100%" height={280}>
+          <LineChart data={data} margin={{ top: 8, right: showPressureAxis ? 60 : 12, bottom: 4, left: -8 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(20,51,42,0.06)" />
             <XAxis
               dataKey="time"
@@ -144,6 +211,18 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
               width={48}
               label={{ value: 'Soil raw', position: 'insideTopRight', offset: 0, style: { fontSize: 10, fill: 'rgba(20,51,42,0.35)' } }}
             />
+            {showPressureAxis && (
+              <YAxis
+                yAxisId="pressure"
+                orientation="right"
+                tick={{ fontSize: 10, fill: 'rgba(99,102,241,0.5)' }}
+                axisLine={false}
+                tickLine={false}
+                width={50}
+                domain={['dataMin - 2', 'dataMax + 2']}
+                label={{ value: 'hPa', position: 'insideTopRight', offset: 8, style: { fontSize: 10, fill: 'rgba(99,102,241,0.45)' } }}
+              />
+            )}
             <Tooltip
               contentStyle={{
                 background: 'rgba(255,255,255,0.9)',
@@ -154,36 +233,31 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
                 boxShadow: '0 4px 12px rgba(20,51,42,0.06)',
               }}
               labelFormatter={(v) => formatTime(v as number)}
-              formatter={(value?: number, name?: string) => [
-                value != null
-                  ? name === 'temperature' ? `${value.toFixed(1)}°C` : String(value)
-                  : '—',
-                name === 'temperature' ? 'Temperature' : 'Soil raw',
-              ]}
+              formatter={(value?: number | string, name?: string) => {
+                const meta = name ? SERIES_META[name as SeriesKey] : undefined
+                if (!meta) return [value ?? '—', name ?? '']
+                const n = typeof value === 'number' ? value : null
+                const formatted = n != null ? `${name === 'soilRaw' ? n : n.toFixed(1)}${meta.unit}` : '—'
+                return [formatted, meta.label]
+              }}
             />
             <Legend
               wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
-              formatter={(v: string) => (v === 'temperature' ? 'Temperature' : 'Soil raw')}
+              formatter={(v: string) => SERIES_META[v as SeriesKey]?.label ?? v}
             />
-            <Line
-              yAxisId="temp"
-              type="monotone"
-              dataKey="temperature"
-              stroke="#F59E0B"
-              strokeWidth={2}
-              dot={false}
-              activeDot={{ r: 3, fill: '#F59E0B' }}
-              connectNulls
-            />
-            <Line
-              yAxisId="soil"
-              type="monotone"
-              dataKey="soilRaw"
-              stroke="#22C55E"
-              strokeWidth={2}
-              dot={false}
-              activeDot={{ r: 3, fill: '#22C55E' }}
-            />
+
+            {visibleSeries.temperature && (
+              <Line yAxisId="temp" type="monotone" dataKey="temperature" stroke="#F59E0B" strokeWidth={2} dot={false} activeDot={{ r: 3, fill: '#F59E0B' }} connectNulls />
+            )}
+            {visibleSeries.soilRaw && (
+              <Line yAxisId="soil" type="monotone" dataKey="soilRaw" stroke="#22C55E" strokeWidth={2} dot={false} activeDot={{ r: 3, fill: '#22C55E' }} />
+            )}
+            {hasPressure && visibleSeries.pressure && (
+              <Line yAxisId="pressure" type="monotone" dataKey="pressure" stroke="#6366F1" strokeWidth={1.5} dot={false} activeDot={{ r: 3, fill: '#6366F1' }} connectNulls />
+            )}
+            {hasHumidity && visibleSeries.humidity && (
+              <Line yAxisId="temp" type="monotone" dataKey="humidity" stroke="#06B6D4" strokeWidth={1.5} dot={false} activeDot={{ r: 3, fill: '#06B6D4' }} connectNulls />
+            )}
           </LineChart>
         </ResponsiveContainer>
       )}

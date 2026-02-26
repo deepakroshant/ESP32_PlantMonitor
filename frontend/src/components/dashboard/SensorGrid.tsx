@@ -42,12 +42,39 @@ function FrozenOverlay({ deviceStatus }: { deviceStatus: DeviceStatus }) {
   )
 }
 
+function BarometerIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 3" />
+      <path d="M12 3v1" />
+      <path d="M12 20v1" />
+      <path d="M3 12h1" />
+      <path d="M20 12h1" />
+    </svg>
+  )
+}
+
+function DropletIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z" />
+    </svg>
+  )
+}
+
+function formatPressure(pa: number): string {
+  return (pa / 100).toFixed(1)
+}
+
 export function SensorGrid({
   deviceStatus, dataUntrusted, isDelayed,
   displayTemp, temp, displayGaugePct, soilLabel,
   readings, selectedMac,
 }: Props) {
   const isLive = deviceStatus === 'live'
+  const hasPressure = readings?.pressure != null && !Number.isNaN(readings.pressure)
+  const hasHumidity = readings?.humidity != null && !Number.isNaN(readings.humidity)
 
   return (
     <div className="relative">
@@ -85,6 +112,21 @@ export function SensorGrid({
           {isLive && <LiveDot />}
         </div>
 
+        {/* Pressure — shown when firmware sends it */}
+        {hasPressure && (
+          <div className="section-card relative overflow-hidden">
+            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+              <BarometerIcon className="h-5 w-5 text-primary" />
+            </div>
+            <p className="stat-label mb-1">Pressure</p>
+            <p className="font-display text-2xl font-bold tabular-nums text-forest">
+              {formatPressure(readings!.pressure!)}
+              <span className="ml-1 text-sm font-medium text-forest-400">hPa</span>
+            </p>
+            {isLive && <LiveDot />}
+          </div>
+        )}
+
         {/* Light */}
         <div className="section-card relative overflow-hidden">
           <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
@@ -96,6 +138,21 @@ export function SensorGrid({
           </p>
           {isLive && <LiveDot />}
         </div>
+
+        {/* Humidity — shown only when sensor is BME280 */}
+        {hasHumidity && (
+          <div className="section-card relative overflow-hidden">
+            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+              <DropletIcon className="h-5 w-5 text-primary" />
+            </div>
+            <p className="stat-label mb-1">Humidity</p>
+            <p className="font-display text-2xl font-bold tabular-nums text-forest">
+              {readings!.humidity!.toFixed(1)}
+              <span className="ml-1 text-sm font-medium text-forest-400">%</span>
+            </p>
+            {isLive && <LiveDot />}
+          </div>
+        )}
       </motion.div>
     </div>
   )

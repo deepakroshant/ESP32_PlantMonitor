@@ -50,7 +50,22 @@ export function DashboardPage() {
   const [newProfileName, setNewProfileName] = useState('')
   const [newProfileType, setNewProfileType] = useState('')
   const [newProfilePresetId, setNewProfilePresetId] = useState<string | null>(null)
-  const [resetRequestedAt, setResetRequestedAt] = useState(0)
+  const [resetRequestedAt, setResetRequestedAtRaw] = useState(() => {
+    const stored = localStorage.getItem('spp_reset_at')
+    if (!stored) return 0
+    const ts = Number(stored)
+    // Expire after 5 minutes so a stale flag never locks the UI
+    if (ts > 0 && Math.floor(Date.now() / 1000) - ts > 300) {
+      localStorage.removeItem('spp_reset_at')
+      return 0
+    }
+    return ts
+  })
+  const setResetRequestedAt = (v: number) => {
+    setResetRequestedAtRaw(v)
+    if (v > 0) localStorage.setItem('spp_reset_at', String(v))
+    else localStorage.removeItem('spp_reset_at')
+  }
   const [showSyncedBanner, setShowSyncedBanner] = useState(false)
   const [calibration, setCalibration] = useState<{ boneDry: number | null; submerged: number | null }>({ boneDry: null, submerged: null })
   const [lastAlert, setLastAlert] = useState<{ timestamp: number; type: string; message: string } | null>(null)
@@ -213,8 +228,12 @@ export function DashboardPage() {
   async function handleResetDeviceWiFi() {
     if (!selectedMac || resetRequestedAt > 0) return
     const now = Math.floor(Date.now() / 1000)
-    await Promise.all([set(ref(firebaseDb, `devices/${selectedMac}/control/resetProvisioning`), true), set(ref(firebaseDb, `devices/${selectedMac}/readings`), null)]).catch(console.error)
+    // Set local state FIRST so the UI transitions immediately to "syncing"
     setResetRequestedAt(now)
+    await Promise.all([
+      set(ref(firebaseDb, `devices/${selectedMac}/control/resetProvisioning`), true),
+      set(ref(firebaseDb, `devices/${selectedMac}/readings`), null),
+    ]).catch(console.error)
   }
 
   async function handleMarkDry() { if (!selectedMac || readings?.soilRaw == null) return; await set(ref(firebaseDb, `devices/${selectedMac}/calibration/boneDry`), readings.soilRaw).catch(console.error) }
@@ -273,8 +292,13 @@ export function DashboardPage() {
   useEffect(() => {
     if (resetRequestedAt > 0 && deviceStatus === 'live') {
       setShowSyncedBanner(true)
-      const timer = setTimeout(() => { setResetRequestedAt(0); setShowSyncedBanner(false) }, 3000)
+      // Show the "Back online" banner for 4s, then clear the reset state
+      const timer = setTimeout(() => { setResetRequestedAt(0); setShowSyncedBanner(false) }, 4000)
       return () => clearTimeout(timer)
+    }
+    // Auto-expire stale reset if somehow left hanging for > 5 min
+    if (resetRequestedAt > 0 && Math.floor(Date.now() / 1000) - resetRequestedAt > 300) {
+      setResetRequestedAt(0)
     }
   }, [deviceStatus, resetRequestedAt])
   useEffect(() => { prevStatusRef.current = deviceStatus }, [deviceStatus])
