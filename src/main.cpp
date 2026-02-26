@@ -183,21 +183,46 @@ void setup() {
     "</div>"
   );
 
-  // Firebase parameters for the portal
-  WiFiManagerParameter p_fb_heading("<hr style='border:0;border-top:1.5px solid #c8ddc0;margin:18px 0'>"
-    "<p style='font-weight:700;font-size:.9rem;color:#1b3a2d;margin-bottom:2px'>"
-    "&#128274; Firebase config <span style='font-weight:400;opacity:.5'>(optional)</span></p>"
-    "<p style='font-size:.78rem;color:#1b3a2d;opacity:.55;margin:0 0 8px'>"
-    "Leave empty to use built-in defaults.</p>");
+  // Firebase parameters — hidden behind a 4-digit PIN so normal users only see WiFi fields.
+  // The PIN gate is pure HTML/JS injected as a custom WiFiManager parameter.
+  WiFiManagerParameter p_fb_gate(
+    "<hr style='border:0;border-top:1.5px solid #c8ddc0;margin:18px 0'>"
+    "<div id='fb-gate' style='text-align:center;padding:8px 0'>"
+      "<p style='font-size:.8rem;color:#1b3a2d;opacity:.5;margin:0 0 6px'>Advanced settings</p>"
+      "<div style='display:flex;gap:6px;justify-content:center;align-items:center'>"
+        "<input id='fb-pin' type='password' maxlength='4' placeholder='PIN'"
+        " style='width:80px;text-align:center;border:1.5px solid #c8ddc0;border-radius:10px;"
+        "padding:8px;font-size:1rem;background:#fff;letter-spacing:4px'"
+        " autocomplete='off'>"
+        "<button type='button' onclick=\""
+          "if(document.getElementById('fb-pin').value==='1234'){"
+            "document.getElementById('fb-gate').style.display='none';"
+            "document.getElementById('fb-fields').style.display='block';"
+          "}else{"
+            "document.getElementById('fb-pin').style.borderColor='#d94f4f';"
+            "document.getElementById('fb-pin').value='';"
+          "}\""
+        " style='background:#3da56b !important;color:#fff;border:none;border-radius:10px;"
+        "padding:8px 14px;font-size:.85rem;font-weight:600;cursor:pointer'>Unlock</button>"
+      "</div>"
+    "</div>"
+    "<div id='fb-fields' style='display:none'>"
+      "<p style='font-weight:700;font-size:.9rem;color:#1b3a2d;margin-bottom:2px'>"
+        "&#128274; Firebase config</p>"
+      "<p style='font-size:.78rem;color:#1b3a2d;opacity:.55;margin:0 0 8px'>"
+        "Leave empty to use built-in defaults.</p>"
+  );
   WiFiManagerParameter p_fb_api("fb_apikey", "Firebase API Key", API_KEY, 79);
   WiFiManagerParameter p_fb_url("fb_dburl", "Firebase DB URL", DB_URL, 129);
   WiFiManagerParameter p_fb_email("fb_email", "Firebase user email", FIREBASE_USER_EMAIL, 71);
   WiFiManagerParameter p_fb_pw("fb_password", "Firebase user password", FIREBASE_USER_PASSWORD, 71);
-  wm.addParameter(&p_fb_heading);
+  WiFiManagerParameter p_fb_close("</div>");
+  wm.addParameter(&p_fb_gate);
   wm.addParameter(&p_fb_api);
   wm.addParameter(&p_fb_url);
   wm.addParameter(&p_fb_email);
   wm.addParameter(&p_fb_pw);
+  wm.addParameter(&p_fb_close);
 
   // WiFi validation: retry 3 times before falling back to portal
   wm.setConnectRetries(3);
