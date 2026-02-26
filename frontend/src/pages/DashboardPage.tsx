@@ -59,7 +59,7 @@ export function DashboardPage() {
   const [newProfileName, setNewProfileName] = useState('')
   const [newProfileType, setNewProfileType] = useState('')
   const [newProfilePresetId, setNewProfilePresetId] = useState<string | null>(null)
-  const [resetWiFiSent, setResetWiFiSent] = useState(false)
+  const [resetFlowActive, setResetFlowActive] = useState(false)
   const [calibration, setCalibration] = useState<{ boneDry: number | null; submerged: number | null }>({ boneDry: null, submerged: null })
   const [lastAlert, setLastAlert] = useState<{ timestamp: number; type: string; message: string } | null>(null)
   const appUrl = typeof window !== 'undefined' ? window.location.origin : ''
@@ -297,8 +297,7 @@ export function DashboardPage() {
   async function handleResetDeviceWiFi() {
     if (!selectedMac) return
     await set(ref(firebaseDb, `devices/${selectedMac}/control/resetProvisioning`), true).catch(console.error)
-    setResetWiFiSent(true)
-    setTimeout(() => setResetWiFiSent(false), 5000)
+    setResetFlowActive(true)
   }
 
   async function handleMarkDry() {
@@ -333,6 +332,14 @@ export function DashboardPage() {
     setNewProfilePresetId(null)
   }
 
+  // Auto-dismiss reset flow once device comes back online with fresh data
+  useEffect(() => {
+    if (!resetFlowActive) return
+    const ts = readings?.timestamp ?? 0
+    const fresh = ts > 1577836800 && Math.floor(Date.now() / 1000) - ts < 30
+    if (fresh) setResetFlowActive(false)
+  }, [readings?.timestamp, resetFlowActive])
+
   const currentPlant = linkedProfileId ? profiles[linkedProfileId] : null
 
   const soil = readings?.soilRaw != null ? soilStatus(readings.soilRaw) : null
@@ -357,19 +364,26 @@ export function DashboardPage() {
   }, [gaugePct])
   const showProTip = temp != null && !Number.isNaN(temp) && temp > 28
   const healthOk = (readings?.health ?? '').toLowerCase() === 'ok'
-  const lastUpdated = readings?.timestamp != null
+  const lastUpdated = readings?.timestamp != null && tsLooksValid
     ? new Date(readings.timestamp * 1000).toLocaleTimeString()
     : null
   const nowSec = Math.floor(Date.now() / 1000)
   const lastSeenSec = readings?.timestamp ?? 0
-  const secondsAgo = nowSec - lastSeenSec
+  // Guard: if the stored timestamp looks like uptime (< year-2020 epoch) treat as unknown
+  const tsLooksValid = lastSeenSec > 1577836800 // > 2020-01-01
+  const secondsAgo = tsLooksValid ? nowSec - lastSeenSec : Infinity
   const isStale = secondsAgo > 30
+  const isOffline = secondsAgo > 120
   const lastSeenLabel =
-    secondsAgo < 60
-      ? `${secondsAgo}s ago`
-      : secondsAgo < 3600
-        ? `${Math.floor(secondsAgo / 60)} min ago`
-        : `${Math.floor(secondsAgo / 3600)} h ago`
+    !tsLooksValid
+      ? 'unknown'
+      : secondsAgo < 60
+        ? `${secondsAgo}s ago`
+        : secondsAgo < 3600
+          ? `${Math.floor(secondsAgo / 60)} min ago`
+          : secondsAgo < 86400
+            ? `${Math.floor(secondsAgo / 3600)} h ago`
+            : `${Math.floor(secondsAgo / 86400)} d ago`
 
   return (
     <div className="min-h-screen bg-surface p-4 md:p-6">
@@ -440,21 +454,68 @@ export function DashboardPage() {
                 <button
                   type="button"
                   onClick={handleResetDeviceWiFi}
-                  className="rounded-2xl border border-terracotta/30 bg-terracotta/10 px-3 py-2 text-xs font-medium text-terracotta transition hover:bg-terracotta/20"
+                  disabled={resetFlowActive}
+                  className="rounded-2xl border border-terracotta/30 bg-terracotta/10 px-3 py-2 text-xs font-medium text-terracotta transition hover:bg-terracotta/20 disabled:opacity-50"
                   title="Device will clear its WiFi config and restart in AP mode so you can enter a new network"
                 >
-                  {resetWiFiSent ? 'Reset sent — device will restart' : 'Reset device WiFi'}
+                  Reset device WiFi
                 </button>
               </div>
             </div>
 
-            {(lastUpdated || isStale) && (
+            {/* Reset WiFi provisioning flow */}
+            {resetFlowActive && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4 rounded-[24px] border-2 border-amber-300 bg-amber-50 p-5"
+              >
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-sm font-semibold text-amber-800">Reconnecting device…</p>
+                  <button
+                    type="button"
+                    onClick={() => setResetFlowActive(false)}
+                    className="rounded-xl px-2 py-0.5 text-xs text-amber-600 transition hover:bg-amber-100"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+                <ol className="ml-4 list-decimal space-y-1 text-sm text-amber-900/80">
+                  <li>The device is restarting into AP mode (takes ~10 s).</li>
+                  <li>On your phone or laptop, connect to the <strong>SmartPlantPro</strong> WiFi network.</li>
+                  <li>A portal should open automatically. If not, go to <strong>192.168.4.1</strong> in a browser.</li>
+                  <li>Choose your WiFi network, enter password, and (optionally) Firebase credentials.</li>
+                  <li>After saving, the device will connect and data will reappear here.</li>
+                </ol>
+              </motion.div>
+            )}
+
+            {/* Offline banner */}
+            {isOffline && !resetFlowActive && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4 flex items-center gap-3 rounded-[24px] border border-terracotta/30 bg-terracotta/5 px-5 py-3"
+              >
+                <span className="flex h-3 w-3 shrink-0">
+                  <span className="absolute inline-flex h-3 w-3 animate-ping rounded-full bg-terracotta/40" />
+                  <span className="relative inline-flex h-3 w-3 rounded-full bg-terracotta" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-terracotta">Device offline</p>
+                  <p className="text-xs text-forest/60">
+                    {tsLooksValid
+                      ? `Last seen ${lastSeenLabel}. Readings below may be outdated.`
+                      : 'No valid timestamp received. The device may never have connected.'}
+                  </p>
+                </div>
+              </motion.div>
+            )}
+
+            {!isOffline && (lastUpdated || isStale) && (
               <p className="mb-4 text-xs text-forest/60">
                 {isStale ? (
-                  <span className={secondsAgo > 120 ? 'text-terracotta/90' : ''}>
-                    Last seen: {lastSeenLabel}
-                    {secondsAgo > 120 && ' — device may be offline'}
-                  </span>
+                  <span>Last seen: {lastSeenLabel}</span>
                 ) : (
                   <>Last reading: {lastUpdated}</>
                 )}
@@ -492,15 +553,21 @@ export function DashboardPage() {
               </div>
               <div className="shrink-0 text-right">
                 <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-forest/70 sm:text-xs">Overall health</p>
-                <span
-                  className={`inline-block rounded-full border-2 px-4 py-2 text-sm font-semibold sm:px-5 sm:py-2.5 sm:text-base ${
-                    healthOk
-                      ? 'border-primary/30 bg-primary/10 text-primary'
-                      : 'border-terracotta/30 bg-terracotta/10 text-terracotta'
-                  }`}
-                >
-                  {readings?.health ?? '—'}
-                </span>
+                {isOffline ? (
+                  <span className="inline-block rounded-full border-2 border-forest/15 bg-forest/5 px-4 py-2 text-sm font-semibold text-forest/40 sm:px-5 sm:py-2.5 sm:text-base">
+                    Offline
+                  </span>
+                ) : (
+                  <span
+                    className={`inline-block rounded-full border-2 px-4 py-2 text-sm font-semibold sm:px-5 sm:py-2.5 sm:text-base ${
+                      healthOk
+                        ? 'border-primary/30 bg-primary/10 text-primary'
+                        : 'border-terracotta/30 bg-terracotta/10 text-terracotta'
+                    }`}
+                  >
+                    {readings?.health ?? '—'}
+                  </span>
+                )}
               </div>
             </motion.div>
 
@@ -523,9 +590,9 @@ export function DashboardPage() {
             <motion.div
               key={`gauges-${selectedMac}`}
               initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
+              animate={{ opacity: isOffline ? 0.45 : 1, y: 0 }}
               transition={{ duration: 0.3, delay: 0.05 }}
-              className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+              className={`grid gap-4 sm:grid-cols-2 lg:grid-cols-3 ${isOffline ? 'pointer-events-none select-none grayscale-[30%]' : ''}`}
             >
               <div className="rounded-[32px] bg-white p-5 shadow-card">
                 <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-mint">

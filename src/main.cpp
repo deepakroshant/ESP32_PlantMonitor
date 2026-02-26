@@ -169,6 +169,24 @@ void setup() {
   Serial.print("WiFi connected, IP: ");
   Serial.println(WiFi.localIP());
 
+  // Sync real-time clock via NTP so timestamps are Unix epoch, not uptime
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  Serial.print("Waiting for NTP time sync");
+  time_t now = time(nullptr);
+  int ntpRetries = 0;
+  while (now < 1000000000L && ntpRetries < 40) {
+    delay(250);
+    now = time(nullptr);
+    ntpRetries++;
+    Serial.print('.');
+  }
+  Serial.println();
+  if (now >= 1000000000L) {
+    Serial.printf("NTP synced: %ld\n", (long)now);
+  } else {
+    Serial.println("NTP sync failed; timestamps will be inaccurate.");
+  }
+
   deviceId = WiFi.macAddress(); // e.g. "24:6F:28:AA:BB:CC"
   Serial.print("Device ID (MAC): ");
   Serial.println(deviceId);
@@ -362,7 +380,7 @@ void taskFirebaseSync(void *pv) {
       json.set("lightBright", s.lightBright);
       json.set("pumpRunning", s.pumpRunning);
       json.set("health", healthStatus(s));
-      json.set("timestamp", (int)(millis() / 1000));
+      json.set("timestamp", (int)time(nullptr));
 
       if (!Firebase.RTDB.updateNode(&fbClient, readingsPath().c_str(), &json)) {
         Serial.print("RTDB update failed: ");
@@ -370,7 +388,7 @@ void taskFirebaseSync(void *pv) {
       }
       // So the app can list "available" devices and show online status
       String deviceListPath = "deviceList/" + deviceId + "/lastSeen";
-      if (!Firebase.RTDB.setInt(&fbClient, deviceListPath.c_str(), (int)(millis() / 1000))) {
+      if (!Firebase.RTDB.setInt(&fbClient, deviceListPath.c_str(), (int)time(nullptr))) {
         // non-fatal
       }
       // Alerts: when health is not OK, write lastAlert for dashboard / future FCM
@@ -378,7 +396,7 @@ void taskFirebaseSync(void *pv) {
       if (h != "OK") {
         String alertPath = "devices/" + deviceId + "/alerts/lastAlert";
         FirebaseJson alertJson;
-        alertJson.set("timestamp", (int)(millis() / 1000));
+        alertJson.set("timestamp", (int)time(nullptr));
         alertJson.set("type", "health");
         alertJson.set("message", h);
         Firebase.RTDB.updateNode(&fbClient, alertPath.c_str(), &alertJson);
