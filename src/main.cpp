@@ -135,14 +135,74 @@ void setup() {
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
 
+  // ── Portal branding: Smart Plant Pro theme ──
+  wm.setTitle("Smart Plant Pro");
+  wm.setCustomHeadElement(
+    "<style>"
+    // Background & typography
+    "body{background:#f4f9f0 !important;font-family:'Segoe UI',system-ui,-apple-system,sans-serif !important;color:#1b3a2d}"
+    ".wrap{max-width:420px;margin:0 auto;padding:18px}"
+    // Title / header
+    "h1{color:#1b3a2d;font-size:1.5rem;font-weight:700;letter-spacing:-.02em}"
+    "h3{color:#1b3a2d;opacity:.6;font-size:.85rem;font-weight:400;margin-top:-8px}"
+    // Buttons
+    "button,input[type='button'],input[type='submit']{"
+      "background:#3da56b !important;border-radius:12px !important;"
+      "font-weight:600;font-size:1rem;line-height:2.8rem;"
+      "box-shadow:0 2px 8px rgba(61,165,107,.25);transition:all .2s}"
+    "button:hover,input[type='submit']:hover{background:#2e8a56 !important;box-shadow:0 4px 14px rgba(61,165,107,.35)}"
+    "button.D{background:#d94f4f !important}"
+    "button.D:hover{background:#c03535 !important}"
+    // Inputs
+    "input:not([type]),input[type='text'],input[type='password'],select{"
+      "border:1.5px solid #c8ddc0 !important;border-radius:10px !important;"
+      "padding:10px 12px !important;font-size:.95rem !important;"
+      "background:#fff !important;transition:border .2s}"
+    "input:focus,select:focus{border-color:#3da56b !important;outline:none !important;"
+      "box-shadow:0 0 0 3px rgba(61,165,107,.15) !important}"
+    // WiFi list
+    "#wifi_list a,.q{color:#1b3a2d}"
+    "a{color:#3da56b !important;font-weight:600}"
+    "a:hover{color:#2e8a56 !important}"
+    // Callout messages
+    ".msg{border-radius:10px;border-left-width:4px;background:#fff;border-color:#c8ddc0}"
+    ".msg.S{border-left-color:#3da56b}.msg.S h4{color:#3da56b}"
+    ".msg.D{border-left-color:#d94f4f}.msg.D h4{color:#d94f4f}"
+    ".msg.P{border-left-color:#3da56b}.msg.P h4{color:#3da56b}"
+    // Param section labels
+    "label{display:block;font-weight:600;font-size:.85rem;color:#1b3a2d;margin:12px 0 4px;opacity:.8}"
+    // Footer area
+    ".c{color:#1b3a2d;opacity:.5;font-size:.75rem}"
+    "</style>"
+    // Brand bar
+    "<div style='background:#3da56b;color:#fff;padding:14px 20px;border-radius:0 0 16px 16px;"
+    "margin:-10px -10px 18px;text-align:center;box-shadow:0 2px 12px rgba(61,165,107,.3)'>"
+    "<div style='font-size:1.5rem'>&#127793;</div>"
+    "<div style='font-weight:700;font-size:1.1rem;letter-spacing:.02em'>Smart Plant Pro</div>"
+    "<div style='font-size:.78rem;opacity:.85;margin-top:2px'>WiFi &amp; Device Setup</div>"
+    "</div>"
+  );
+
+  // Firebase parameters for the portal
+  WiFiManagerParameter p_fb_heading("<hr style='border:0;border-top:1.5px solid #c8ddc0;margin:18px 0'>"
+    "<p style='font-weight:700;font-size:.9rem;color:#1b3a2d;margin-bottom:2px'>"
+    "&#128274; Firebase config <span style='font-weight:400;opacity:.5'>(optional)</span></p>"
+    "<p style='font-size:.78rem;color:#1b3a2d;opacity:.55;margin:0 0 8px'>"
+    "Leave empty to use built-in defaults.</p>");
   WiFiManagerParameter p_fb_api("fb_apikey", "Firebase API Key", API_KEY, 79);
   WiFiManagerParameter p_fb_url("fb_dburl", "Firebase DB URL", DB_URL, 129);
   WiFiManagerParameter p_fb_email("fb_email", "Firebase user email", FIREBASE_USER_EMAIL, 71);
   WiFiManagerParameter p_fb_pw("fb_password", "Firebase user password", FIREBASE_USER_PASSWORD, 71);
+  wm.addParameter(&p_fb_heading);
   wm.addParameter(&p_fb_api);
   wm.addParameter(&p_fb_url);
   wm.addParameter(&p_fb_email);
   wm.addParameter(&p_fb_pw);
+
+  // WiFi validation: retry 3 times before falling back to portal
+  wm.setConnectRetries(3);
+  wm.setSaveConnectTimeout(15);
+  wm.setConfigPortalTimeout(0);
 
   if (!wm.autoConnect("SmartPlantPro")) {
     Serial.println("WiFiManager failed to connect, restarting...");
@@ -410,6 +470,19 @@ void taskFirebaseSync(void *pv) {
         alertJson.set("message", h);
         Firebase.RTDB.updateNode(&fbClient, alertPath.c_str(), &alertJson);
       }
+
+      // History: push a compact snapshot every ~5 min (30 cycles × 10 s)
+      static int histCycles = 0;
+      if (++histCycles >= 30) {
+        histCycles = 0;
+        String histPath = "devices/" + deviceId + "/history/" + String((int)time(nullptr));
+        FirebaseJson hj;
+        if (!isnan(s.temperatureC)) hj.set("t", s.temperatureC);
+        hj.set("s", s.soilRaw);
+        hj.set("l", s.lightBright ? 1 : 0);
+        Firebase.RTDB.setJSON(&fbClient, histPath.c_str(), &hj);
+      }
+
       xSemaphoreGive(gFirebaseMutex);
     }
 

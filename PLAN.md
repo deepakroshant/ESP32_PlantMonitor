@@ -15,8 +15,21 @@ This document is the master plan for making the project production-ready: one-ti
 | 5 | Calibration (app + RTDB, gauge uses boneDry/submerged) | Done |
 | 6 | Offline / last seen in UI | Done |
 | 7 | Alerts (ESP32 writes lastAlert; app shows it) | Done – FCM optional via Cloud Function |
-| 8 | Per-device auth (Cloud Function + token) | Not done – see Phase 2 |
-| 9 | Multi-slot | Not done – see Phase 7 |
+| 8 | Per-device auth (Cloud Function + token) | Not done – see Phase 2 (requires Cloud Functions billing) |
+| 9 | Multi-slot | Not done – see Phase 7 (requires hardware changes) |
+| 10 | NTP timestamps (real epoch time) | Done – `configTime()` + `time(nullptr)` |
+| 11 | Offline/disconnect detection (live timer) | Done – `nowSec` ticks every 5s; offline banner + dimmed cards |
+| 12 | WiFi SSID display on dashboard | Done – firmware writes `wifiSSID`/`wifiRSSI`; frontend shows connection |
+| 13 | Reset WiFi guided flow (phased sync) | Done – 3-phase: resetting → wifi-connected → synced |
+| 14 | WiFiManager portal branding | Done – Smart Plant Pro theme, green brand bar, custom CSS |
+| 15 | WiFi validation (retry on wrong password) | Done – `setConnectRetries(3)`, `setSaveConnectTimeout(15)` |
+| 16 | UI/UX overhaul (sustainability theme) | Done – glassmorphism, Inter/Jakarta Sans, new design tokens |
+| 17 | Alert acknowledge / dismiss | Done – "Dismiss" button writes ackAt, hides alert |
+| 18 | Manual pump trigger button | Done – "Water now" with cooldown + live pump state |
+| 19 | Loading skeleton screen | Done – plant icon + progress bar in ProtectedRoute |
+| 20 | Button/input style consistency | Done – .btn-primary, .btn-ghost, .input-field everywhere |
+| 21 | Readings history chart (24 h) | Done – ESP32 pushes to `history/{epoch}` every 5 min; Recharts line chart with 6/12/24 h tabs |
+| 22 | Browser push notifications | Done – Notification API toggle; fires on new `lastAlert`; plant icon in tray |
 
 ### Double-check (verification)
 

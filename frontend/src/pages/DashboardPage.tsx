@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, animate } from 'framer-motion'
 import { ref, onValue, set, push, remove } from 'firebase/database'
@@ -13,6 +13,7 @@ import { PlantIcon } from '../components/icons/PlantIcon'
 import { ThermometerIcon } from '../components/icons/ThermometerIcon'
 import { SunIcon } from '../components/icons/SunIcon'
 import { PencilIcon } from '../components/icons/PencilIcon'
+import { HistoryChart } from '../components/HistoryChart'
 
 type Readings = {
   temperature?: number
@@ -63,8 +64,15 @@ export function DashboardPage() {
   const [newProfilePresetId, setNewProfilePresetId] = useState<string | null>(null)
   const [resetFlowActive, setResetFlowActive] = useState(false)
   const [resetRequestedAt, setResetRequestedAt] = useState(0)
+  const [syncPhase, setSyncPhase] = useState<'idle' | 'wifi-connected' | 'synced'>('idle')
   const [calibration, setCalibration] = useState<{ boneDry: number | null; submerged: number | null }>({ boneDry: null, submerged: null })
   const [lastAlert, setLastAlert] = useState<{ timestamp: number; type: string; message: string } | null>(null)
+  const [pumpActive, setPumpActive] = useState(false)
+  const [pumpCooldown, setPumpCooldown] = useState(false)
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() =>
+    typeof window !== 'undefined' && localStorage.getItem('notif_enabled') === 'true'
+  )
+  const lastNotifiedAtRef = useRef(0)
   const appUrl = typeof window !== 'undefined' ? window.location.origin : ''
 
   // Load user's claimed devices
@@ -178,6 +186,14 @@ export function DashboardPage() {
         setLastAlert(null)
       }
     })
+    return () => unsub()
+  }, [selectedMac])
+
+  // Live pump state
+  useEffect(() => {
+    if (!selectedMac) { setPumpActive(false); return }
+    const pumpRef = ref(firebaseDb, `devices/${selectedMac}/readings/pumpRunning`)
+    const unsub = onValue(pumpRef, (snap) => setPumpActive(snap.val() === true))
     return () => unsub()
   }, [selectedMac])
 
@@ -302,11 +318,11 @@ export function DashboardPage() {
     const now = Math.floor(Date.now() / 1000)
     await Promise.all([
       set(ref(firebaseDb, `devices/${selectedMac}/control/resetProvisioning`), true),
-      set(ref(firebaseDb, `devices/${selectedMac}/readings/wifiSSID`), null),
-      set(ref(firebaseDb, `devices/${selectedMac}/readings/wifiRSSI`), null),
+      set(ref(firebaseDb, `devices/${selectedMac}/readings`), null),
     ]).catch(console.error)
     setResetRequestedAt(now)
     setResetFlowActive(true)
+    setSyncPhase('idle')
   }
 
   async function handleMarkDry() {
@@ -318,6 +334,45 @@ export function DashboardPage() {
     if (!selectedMac || readings?.soilRaw == null) return
     await set(ref(firebaseDb, `devices/${selectedMac}/calibration/submerged`), readings.soilRaw).catch(console.error)
   }
+
+  async function handleTriggerPump() {
+    if (!selectedMac || pumpCooldown) return
+    await set(ref(firebaseDb, `devices/${selectedMac}/control/pumpRequest`), true).catch(console.error)
+    setPumpCooldown(true)
+    setTimeout(() => setPumpCooldown(false), 8000)
+  }
+
+  async function handleAckAlert() {
+    if (!selectedMac) return
+    await set(ref(firebaseDb, `devices/${selectedMac}/alerts/lastAlert/ackAt`), Math.floor(Date.now() / 1000)).catch(console.error)
+    setLastAlert(null)
+  }
+
+  async function handleToggleNotifications() {
+    if (notificationsEnabled) {
+      setNotificationsEnabled(false)
+      localStorage.setItem('notif_enabled', 'false')
+      return
+    }
+    if (!('Notification' in window)) return
+    const perm = await Notification.requestPermission()
+    if (perm === 'granted') {
+      setNotificationsEnabled(true)
+      localStorage.setItem('notif_enabled', 'true')
+    }
+  }
+
+  // Fire browser notification on new alert
+  useEffect(() => {
+    if (!notificationsEnabled || !lastAlert) return
+    if (!('Notification' in window) || Notification.permission !== 'granted') return
+    if (lastAlert.timestamp <= lastNotifiedAtRef.current) return
+    lastNotifiedAtRef.current = lastAlert.timestamp
+    new Notification('Smart Plant Pro', {
+      body: lastAlert.message,
+      icon: '/plant-icon.svg',
+    })
+  }, [lastAlert, notificationsEnabled])
 
   async function addNewProfile(e: React.FormEvent) {
     e.preventDefault()
@@ -341,17 +396,31 @@ export function DashboardPage() {
     setNewProfilePresetId(null)
   }
 
-  // Auto-dismiss reset flow once device pushes data written AFTER the reset was requested
+  // Phased sync detection after reset:
+  //  1. resetFlowActive=true → full guide shown
+  //  2. wifiSSID appears (post-reset) → dismiss guide, show "wifi-connected / syncing"
+  //  3. valid sensor data arrives (post-reset) → show "synced", then idle
   useEffect(() => {
-    if (!resetFlowActive || !resetRequestedAt) return
+    if (!resetRequestedAt) return
     const ts = readings?.timestamp ?? 0
-    const writtenAfterReset = ts > resetRequestedAt
+    const isPostReset = ts > resetRequestedAt
     const hasWifi = !!readings?.wifiSSID
-    if (writtenAfterReset && hasWifi) {
+    const hasSensors = readings?.temperature != null || (readings?.soilRaw != null && readings.soilRaw > 0)
+
+    if (isPostReset && hasWifi && hasSensors && syncPhase !== 'synced') {
+      // Full data arrived — sync complete
       setResetFlowActive(false)
-      setResetRequestedAt(0)
+      setSyncPhase('synced')
+      setTimeout(() => {
+        setSyncPhase('idle')
+        setResetRequestedAt(0)
+      }, 3000)
+    } else if (isPostReset && hasWifi && syncPhase === 'idle') {
+      // WiFi connected but no sensor data yet
+      setResetFlowActive(false)
+      setSyncPhase('wifi-connected')
     }
-  }, [readings?.timestamp, readings?.wifiSSID, resetFlowActive, resetRequestedAt])
+  }, [readings?.timestamp, readings?.wifiSSID, readings?.temperature, readings?.soilRaw, resetRequestedAt, syncPhase])
 
   const currentPlant = linkedProfileId ? profiles[linkedProfileId] : null
 
@@ -403,59 +472,53 @@ export function DashboardPage() {
             ? `${Math.floor(secondsAgo / 3600)} h ago`
             : `${Math.floor(secondsAgo / 86400)} d ago`
 
-  const awaitingPostResetData = resetRequestedAt > 0 && (readings?.timestamp ?? 0) <= resetRequestedAt
-  const dataUntrusted = isOffline || awaitingPostResetData
+  const isSyncing = syncPhase === 'wifi-connected'
+  const dataUntrusted = isOffline || isSyncing
 
   return (
-    <div className="min-h-screen bg-surface p-4 md:p-6">
+    <div className="min-h-screen bg-surface p-4 md:p-6 lg:p-8">
       <div className="mx-auto max-w-4xl">
-        <header className="mb-8 flex flex-wrap items-center justify-between gap-4 border-b border-forest/10 pb-5">
-          <h1 className="text-2xl font-bold tracking-tight text-forest">
-            Smart Plant Pro
-          </h1>
+        <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+              <PlantIcon className="h-5 w-5 text-primary" />
+            </div>
+            <h1 className="font-display text-xl font-bold tracking-tight text-forest sm:text-2xl">
+              Smart Plant Pro
+            </h1>
+          </div>
           <div className="flex items-center gap-2">
             {user && (
-              <span className="rounded-full border border-forest/10 bg-white px-3 py-2 text-sm text-forest/80 shadow-card">
+              <span className="hidden rounded-xl bg-white/60 px-3 py-2 text-xs text-forest/50 backdrop-blur-sm sm:inline-block">
                 {user.displayName || user.email || 'Account'}
               </span>
             )}
-            <Link
-              to="/claim"
-              className="flex items-center gap-2 rounded-full border border-forest/10 bg-white px-4 py-2.5 text-sm font-medium text-forest shadow-card transition hover:bg-mint/50"
-            >
-              <DeviceIcon className="h-5 w-5" />
-              Claim device
+            <Link to="/claim" className="btn-ghost flex items-center gap-1.5 !py-2 !px-3 !text-xs">
+              <DeviceIcon className="h-4 w-4" />
+              <span className="hidden sm:inline">Add device</span>
             </Link>
-            <button
-              onClick={() => signOut()}
-              className="flex items-center gap-2 rounded-full border border-forest/10 bg-white px-4 py-2.5 text-sm font-medium text-forest shadow-card transition hover:bg-mint/50"
-            >
-              <LogoutIcon className="h-5 w-5" />
-              Sign out
+            <button onClick={() => signOut()} className="btn-ghost flex items-center gap-1.5 !py-2 !px-3 !text-xs">
+              <LogoutIcon className="h-4 w-4" />
+              <span className="hidden sm:inline">Sign out</span>
             </button>
           </div>
         </header>
 
         {myDevices.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-[32px] bg-white p-12 text-center shadow-card">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-mint">
-              <PlusIcon className="h-8 w-8 text-primary" />
+          <div className="section-card flex flex-col items-center justify-center p-12 text-center">
+            <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 shadow-glow">
+              <PlusIcon className="h-7 w-7 text-primary" />
             </div>
-            <p className="mb-2 text-lg font-medium text-forest">Time to add a new green friend.</p>
-            <p className="mb-6 text-sm text-forest/70">Claim a device to see live readings.</p>
-            <Link
-              to="/claim"
-              className="inline-block rounded-2xl bg-primary px-6 py-3 font-semibold text-white shadow-card transition hover:-translate-y-0.5 hover:shadow-lg"
-            >
-              Claim a device
+            <p className="mb-2 font-display text-lg font-semibold text-forest">No devices yet</p>
+            <p className="mb-6 text-sm text-forest/45">Add your first plant monitor to get started.</p>
+            <Link to="/claim" className="btn-primary">
+              Add a device
             </Link>
           </div>
         ) : (
           <>
             <div className="mb-6">
-              <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-forest/70">
-                Device
-              </label>
+              <label className="stat-label mb-2 block">Device</label>
               <div className="flex flex-wrap items-center gap-2">
                 <select
                   value={selectedMac}
@@ -464,7 +527,7 @@ export function DashboardPage() {
                     setSelectedMac(v)
                     localStorage.setItem(STORAGE_KEY, v)
                   }}
-                  className="w-full max-w-sm rounded-2xl border border-forest/10 bg-white px-4 py-2.5 font-mono text-sm text-forest shadow-card focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="input-field max-w-sm !font-mono"
                 >
                   {myDevices.map((mac) => (
                     <option key={mac} value={mac}>
@@ -486,35 +549,44 @@ export function DashboardPage() {
                   {resetFlowActive ? 'Reset sent' : 'Reset device WiFi'}
                 </button>
               </div>
-              {/* WiFi connection status */}
-              {(() => {
-                const dataIsPostReset = resetRequestedAt > 0
-                  ? (readings?.timestamp ?? 0) > resetRequestedAt
-                  : true
-                const wifiOk = !!readings?.wifiSSID && !isOffline && !resetFlowActive && dataIsPostReset
-                return (
-                  <div className="mt-2 flex items-center gap-2">
-                    {wifiOk ? (
-                      <>
-                        <span className="inline-flex h-2 w-2 rounded-full bg-primary" />
-                        <span className="text-xs text-forest/70">
-                          Connected to <strong className="font-medium text-forest">{readings!.wifiSSID}</strong>
-                          {readings!.wifiRSSI != null && (
-                            <span className="ml-1 text-forest/40">({readings!.wifiRSSI} dBm)</span>
-                          )}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="inline-flex h-2 w-2 rounded-full bg-terracotta" />
-                        <span className="text-xs text-terracotta/80">
-                          {resetFlowActive ? 'Device is restarting…' : 'Not connected to WiFi'}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                )
-              })()}
+              {/* WiFi + sync status */}
+              <div className="mt-2 flex items-center gap-2">
+                {resetFlowActive ? (
+                  <>
+                    <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" /><span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" /></span>
+                    <span className="text-xs text-amber-700">Device is restarting…</span>
+                  </>
+                ) : syncPhase === 'wifi-connected' ? (
+                  <>
+                    <span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary/50" /><span className="relative inline-flex h-2 w-2 rounded-full bg-primary" /></span>
+                    <span className="text-xs text-forest/70">
+                      Connected to <strong className="font-medium text-forest">{readings?.wifiSSID}</strong> — syncing sensor data…
+                    </span>
+                  </>
+                ) : syncPhase === 'synced' ? (
+                  <>
+                    <span className="inline-flex h-2 w-2 rounded-full bg-primary" />
+                    <span className="text-xs font-medium text-primary">
+                      Sync complete — connected to {readings?.wifiSSID}
+                    </span>
+                  </>
+                ) : readings?.wifiSSID && !isOffline ? (
+                  <>
+                    <span className="inline-flex h-2 w-2 rounded-full bg-primary" />
+                    <span className="text-xs text-forest/70">
+                      Connected to <strong className="font-medium text-forest">{readings.wifiSSID}</strong>
+                      {readings.wifiRSSI != null && (
+                        <span className="ml-1 text-forest/40">({readings.wifiRSSI} dBm)</span>
+                      )}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="inline-flex h-2 w-2 rounded-full bg-terracotta" />
+                    <span className="text-xs text-terracotta/80">Not connected to WiFi</span>
+                  </>
+                )}
+              </div>
             </div>
 
             {/* Reset WiFi: full-page provisioning guide replaces dashboard content */}
@@ -595,8 +667,8 @@ export function DashboardPage() {
             )}
 
             {!resetFlowActive && (<>
-            {/* Syncing banner: device is on WiFi but we haven't received post-reset data yet */}
-            {resetRequestedAt > 0 && (readings?.timestamp ?? 0) <= resetRequestedAt && readings?.wifiSSID && (
+            {/* Syncing banner */}
+            {syncPhase === 'wifi-connected' && (
               <motion.div
                 initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -607,16 +679,28 @@ export function DashboardPage() {
                   <span className="relative inline-flex h-3 w-3 rounded-full bg-primary" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-forest">Connected to WiFi — syncing device data…</p>
+                  <p className="text-sm font-medium text-forest">Connected to WiFi — syncing sensor data…</p>
                   <p className="text-xs text-forest/60">
-                    The device is online and will send fresh sensor readings in a few seconds.
+                    The device is online. Waiting for fresh sensor readings…
                   </p>
                 </div>
               </motion.div>
             )}
 
+            {/* Sync complete banner */}
+            {syncPhase === 'synced' && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4 flex items-center gap-3 rounded-[24px] border border-primary/30 bg-primary/10 px-5 py-3"
+              >
+                <svg className="h-5 w-5 shrink-0 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                <p className="text-sm font-medium text-primary">Sync complete — live data is now showing</p>
+              </motion.div>
+            )}
+
             {/* Offline banner */}
-            {isOffline && !(resetRequestedAt > 0 && readings?.wifiSSID) && (
+            {isOffline && syncPhase === 'idle' && (
               <motion.div
                 initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -647,16 +731,16 @@ export function DashboardPage() {
               </p>
             )}
 
-            {/* Hero: plant name/type + overall health — compact single row */}
+            {/* Hero: plant name/type + overall health */}
             <motion.div
               key={selectedMac}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
-              className="mb-6 flex items-center gap-4 rounded-[32px] bg-white p-4 shadow-card sm:gap-5 sm:p-5"
+              className="section-card mb-6 flex items-center gap-4 !p-4 sm:gap-5 sm:!p-5"
             >
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-mint sm:h-16 sm:w-16">
-                <PlantIcon className="h-8 w-8 text-primary sm:h-9 sm:w-9" />
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 sm:h-14 sm:w-14">
+                <PlantIcon className="h-6 w-6 text-primary sm:h-7 sm:w-7" />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
@@ -680,7 +764,7 @@ export function DashboardPage() {
                 <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-forest/70 sm:text-xs">Overall health</p>
                 {dataUntrusted ? (
                   <span className="inline-block rounded-full border-2 border-forest/15 bg-forest/5 px-4 py-2 text-sm font-semibold text-forest/40 sm:px-5 sm:py-2.5 sm:text-base">
-                    {awaitingPostResetData ? 'Syncing' : 'Offline'}
+                    {isSyncing ? 'Syncing' : 'Offline'}
                   </span>
                 ) : (
                   <span
@@ -696,21 +780,60 @@ export function DashboardPage() {
               </div>
             </motion.div>
 
-            {lastAlert && (
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mb-4 rounded-2xl border border-terracotta/30 bg-terracotta/10 px-4 py-2"
-              >
-                <p className="text-xs font-medium uppercase tracking-wider text-terracotta">Last alert</p>
-                <p className="text-sm text-forest/90">{lastAlert.message}</p>
-                {lastAlert.timestamp > 0 && (
-                  <p className="mt-0.5 text-xs text-forest/60">
-                    {new Date(lastAlert.timestamp * 1000).toLocaleString()}
-                  </p>
-                )}
-              </motion.div>
-            )}
+            {/* Alert + notification toggle row */}
+            <div className="mb-4 space-y-3">
+              {lastAlert && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex items-start gap-3 rounded-2xl border border-terracotta/20 bg-terracotta-light/60 px-4 py-3"
+                >
+                  <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-terracotta/15">
+                    <svg className="h-3.5 w-3.5 text-terracotta" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 15.75h.008" /></svg>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-forest">{lastAlert.message}</p>
+                    {lastAlert.timestamp > 0 && (
+                      <p className="mt-0.5 text-xs text-forest/40">
+                        {new Date(lastAlert.timestamp * 1000).toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAckAlert}
+                    className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium text-terracotta transition hover:bg-terracotta/10"
+                  >
+                    Dismiss
+                  </button>
+                </motion.div>
+              )}
+
+              {/* Browser notification toggle */}
+              <div className="flex items-center gap-3 rounded-2xl border border-forest/5 bg-white/60 px-4 py-2.5">
+                <svg className="h-4 w-4 shrink-0 text-forest/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>
+                <span className="flex-1 text-xs text-forest/60">
+                  {'Notification' in window && Notification.permission === 'denied'
+                    ? 'Notifications blocked by browser'
+                    : 'Notify me when plant health drops'}
+                </span>
+                <button
+                  type="button"
+                  onClick={handleToggleNotifications}
+                  disabled={'Notification' in window && Notification.permission === 'denied'}
+                  className={`relative h-6 w-11 rounded-full transition-colors ${
+                    notificationsEnabled ? 'bg-primary' : 'bg-forest/15'
+                  } disabled:cursor-not-allowed disabled:opacity-40`}
+                  aria-label="Toggle browser notifications"
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                      notificationsEnabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
 
             <motion.div
               key={`gauges-${selectedMac}`}
@@ -719,33 +842,27 @@ export function DashboardPage() {
               transition={{ duration: 0.3, delay: 0.05 }}
               className={`grid gap-4 sm:grid-cols-2 lg:grid-cols-3 ${dataUntrusted ? 'pointer-events-none select-none grayscale-[30%]' : ''}`}
             >
-              <div className="rounded-[32px] bg-white p-5 shadow-card">
-                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-mint">
-                  <ThermometerIcon className="h-6 w-6 text-primary" />
+              <div className="section-card">
+                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                  <ThermometerIcon className="h-5 w-5 text-primary" />
                 </div>
-                <p className="mb-0.5 text-xs font-medium uppercase tracking-wider text-forest/70">
-                  Temperature
-                </p>
-                <p className="text-2xl font-semibold tabular-nums text-forest">
+                <p className="stat-label mb-1">Temperature</p>
+                <p className="font-display text-2xl font-bold tabular-nums text-forest">
                   {temp != null && !Number.isNaN(temp)
-                    ? `${displayTemp.toFixed(1)} °C`
+                    ? `${displayTemp.toFixed(1)}°C`
                     : '—'}
                 </p>
               </div>
-              <div className="rounded-[32px] bg-white/90 p-5 shadow-card backdrop-blur-sm lg:col-span-2">
-                <p className="mb-4 text-center text-xs font-medium uppercase tracking-wider text-forest/70">
-                  Soil moisture
-                </p>
-                <CircularGauge percentage={displayGaugePct} label={soilLabel} size={180} strokeWidth={14} />
+              <div className="section-card lg:col-span-2">
+                <p className="stat-label mb-4 text-center">Soil moisture</p>
+                <CircularGauge percentage={displayGaugePct} label={soilLabel} size={170} strokeWidth={10} />
               </div>
-              <div className="rounded-[32px] bg-white p-5 shadow-card">
-                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-mint">
-                  <SunIcon className="h-6 w-6 text-primary" />
+              <div className="section-card">
+                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                  <SunIcon className="h-5 w-5 text-primary" />
                 </div>
-                <p className="mb-0.5 text-xs font-medium uppercase tracking-wider text-forest/70">
-                  Light
-                </p>
-                <p className="text-xl font-semibold text-forest">
+                <p className="stat-label mb-1">Light</p>
+                <p className="font-display text-xl font-bold text-forest">
                   {readings?.lightBright === true
                     ? 'Bright'
                     : readings?.lightBright === false
@@ -755,12 +872,55 @@ export function DashboardPage() {
               </div>
             </motion.div>
 
+            {/* History chart */}
+            {selectedMac && !dataUntrusted && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: 0.06 }}
+              >
+                <HistoryChart deviceMac={selectedMac} />
+              </motion.div>
+            )}
+
+            {/* Pump control */}
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: 0.08 }}
+              className="mt-4 flex items-center gap-4 section-card !p-4"
+            >
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${pumpActive ? 'bg-primary/20' : 'bg-forest/5'}`}>
+                <svg className={`h-5 w-5 transition-colors ${pumpActive ? 'text-primary' : 'text-forest/30'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" /></svg>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-forest">Water pump</p>
+                <p className="text-xs text-forest/40">
+                  {pumpActive ? 'Pump is running…' : 'Send a manual watering pulse to the device.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleTriggerPump}
+                disabled={pumpCooldown || dataUntrusted}
+                className={`shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                  pumpActive
+                    ? 'bg-primary/15 text-primary'
+                    : pumpCooldown
+                      ? 'bg-forest/5 text-forest/30'
+                      : 'bg-primary text-white hover:bg-primary-600 shadow-sm'
+                } disabled:opacity-50`}
+              >
+                {pumpActive ? 'Running…' : pumpCooldown ? 'Sent' : 'Water now'}
+              </button>
+            </motion.div>
+
             {showProTip && (
-              <div className="mt-6 rounded-[32px] border border-terracotta/20 bg-terracotta/5 p-4 shadow-card">
+              <div className="mt-6 rounded-2xl border border-terracotta/15 bg-terracotta-light/50 p-4">
                 <p className="text-sm font-medium text-terracotta">
                   Pro tip
                 </p>
-                <p className="mt-1 text-sm text-forest/80">
+                <p className="mt-1 text-sm text-forest/45">
                   Temperature is above 28 °C. Consider lowering the target moisture threshold so the plant doesn’t get overwatered in the heat.
                 </p>
               </div>
@@ -770,12 +930,12 @@ export function DashboardPage() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: 0.1 }}
-              className="mt-6 rounded-[32px] bg-white p-5 shadow-card"
+              className="section-card mt-6"
             >
-              <p className="mb-1 text-xs font-medium uppercase tracking-wider text-forest/70">
+              <p className="mb-1 stat-label">
                 Target moisture (raw threshold)
               </p>
-              <p className="mb-3 text-sm text-forest/80">
+              <p className="mb-3 text-sm text-forest/45">
                 Soil raw below this = “wet enough”. Drag to set target.
               </p>
               <div className="flex flex-wrap items-center gap-4">
@@ -795,7 +955,7 @@ export function DashboardPage() {
                 <span className="w-16 text-right text-lg font-semibold tabular-nums text-forest">{targetSoil}</span>
                 <button
                   onClick={handleSaveTarget}
-                  className="rounded-2xl bg-primary px-4 py-2 font-medium text-white transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-surface"
+                  className="btn-primary"
                 >
                   Save
                 </button>
@@ -810,12 +970,12 @@ export function DashboardPage() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: 0.08 }}
-              className="mt-6 rounded-[32px] bg-white p-5 shadow-card"
+              className="section-card mt-6"
             >
-              <p className="mb-1 text-xs font-medium uppercase tracking-wider text-forest/70">
+              <p className="mb-1 stat-label">
                 Calibrate soil sensor
               </p>
-              <p className="mb-3 text-sm text-forest/80">
+              <p className="mb-3 text-sm text-forest/45">
                 Mark one dry and one wet reading so the gauge uses your sensor range. Current raw: {readings?.soilRaw ?? '—'}
               </p>
               <div className="flex flex-wrap items-center gap-2">
@@ -823,7 +983,7 @@ export function DashboardPage() {
                   type="button"
                   onClick={handleMarkDry}
                   disabled={readings?.soilRaw == null}
-                  className="rounded-2xl border border-forest/20 bg-white px-4 py-2 text-sm font-medium text-forest transition hover:bg-mint/30 disabled:opacity-50"
+                  className="btn-ghost disabled:opacity-40"
                 >
                   Mark as dry
                 </button>
@@ -831,7 +991,7 @@ export function DashboardPage() {
                   type="button"
                   onClick={handleMarkWet}
                   disabled={readings?.soilRaw == null}
-                  className="rounded-2xl border border-forest/20 bg-white px-4 py-2 text-sm font-medium text-forest transition hover:bg-mint/30 disabled:opacity-50"
+                  className="btn-ghost disabled:opacity-40"
                 >
                   Mark as wet
                 </button>
@@ -848,12 +1008,10 @@ export function DashboardPage() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: 0.06 }}
-              className="mt-6 rounded-[32px] bg-white p-5 shadow-card"
+              className="section-card mt-6"
             >
-              <h2 className="mb-1 text-sm font-medium uppercase tracking-wider text-forest/70">
-                Plant profiles
-              </h2>
-              <p className="mb-4 text-sm text-forest/80">
+              <h2 className="stat-label mb-1">Plant profiles</h2>
+              <p className="mb-4 text-sm text-forest/45">
                 Add profiles for different plants. Link one to this device to show its name and type above.
               </p>
               <form onSubmit={addNewProfile} className="mb-4 flex flex-wrap items-center gap-2">
@@ -862,7 +1020,7 @@ export function DashboardPage() {
                   value={newProfileName}
                   onChange={(e) => setNewProfileName(e.target.value)}
                   placeholder="Plant name"
-                  className="rounded-2xl border border-forest/10 bg-white px-3 py-2 text-sm text-forest placeholder-forest/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="input-field"
                 />
                 <select
                   value={newProfilePresetId ?? ''}
@@ -872,7 +1030,7 @@ export function DashboardPage() {
                     const preset = id ? EXAMPLE_PLANTS.find((p) => p.id === id) : null
                     setNewProfileType(preset ? preset.label : '')
                   }}
-                  className="rounded-2xl border border-forest/10 bg-white px-3 py-2 text-sm text-forest focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="input-field"
                 >
                   <option value="">— Example plant —</option>
                   {EXAMPLE_PLANTS.map((p) => (
@@ -886,11 +1044,11 @@ export function DashboardPage() {
                   value={newProfileType}
                   onChange={(e) => setNewProfileType(e.target.value)}
                   placeholder="Type"
-                  className="min-w-[120px] rounded-2xl border border-forest/10 bg-white px-3 py-2 text-sm text-forest placeholder-forest/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  className="min-w-[120px] input-field"
                 />
                 <button
                   type="submit"
-                  className="rounded-2xl bg-primary px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+                  className="btn-primary"
                 >
                   Add profile
                 </button>
@@ -953,7 +1111,7 @@ export function DashboardPage() {
         {/* Edit plant modal */}
         {editModalOpen && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-forest/30 p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-forest/20 p-4 backdrop-blur-sm"
             role="dialog"
             aria-modal="true"
             aria-labelledby="edit-plant-title"
@@ -962,7 +1120,7 @@ export function DashboardPage() {
             <motion.div
               initial={{ opacity: 0, scale: 0.98 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="w-full max-w-sm rounded-[32px] bg-white p-6 shadow-card"
+              className="glass-card-solid w-full max-w-sm rounded-3xl p-6 shadow-card"
               onClick={(e) => e.stopPropagation()}
             >
               <h2 id="edit-plant-title" className="mb-4 text-lg font-semibold text-forest">
@@ -1031,11 +1189,9 @@ export function DashboardPage() {
         )}
 
         {/* Invite user section */}
-        <section className="mt-10 rounded-[32px] bg-white p-5 shadow-card">
-          <h2 className="mb-1 text-sm font-medium uppercase tracking-wider text-forest/70">
-            Invite user
-          </h2>
-          <p className="mb-3 text-sm text-forest/80">
+        <section className="section-card mt-10">
+          <h2 className="stat-label mb-1">Invite user</h2>
+          <p className="mb-3 text-sm text-forest/45">
             Share the app link. New users sign up with email and password, then can claim their own devices.
           </p>
           <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -1048,7 +1204,7 @@ export function DashboardPage() {
             <button
               type="button"
               onClick={handleCopyUrl}
-              className="rounded-2xl border border-forest/10 bg-mint/50 px-4 py-2 text-sm font-medium text-forest transition hover:bg-mint"
+              className="btn-ghost"
             >
               {copyOk ? 'Copied!' : 'Copy link'}
             </button>
@@ -1059,11 +1215,11 @@ export function DashboardPage() {
               value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)}
               placeholder="Email to add to invite list"
-              className="rounded-2xl border border-forest/10 bg-white px-3 py-2 text-sm text-forest placeholder-forest/40 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+              className="input-field"
             />
             <button
               type="submit"
-              className="rounded-2xl bg-primary px-4 py-2 text-sm font-medium text-white transition hover:opacity-90"
+              className="btn-primary"
             >
               Add to invite list
             </button>
