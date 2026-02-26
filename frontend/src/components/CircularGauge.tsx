@@ -14,30 +14,29 @@ export function CircularGauge({ percentage, label, size = 170, strokeWidth = 10 
   const clamped = Math.max(0, Math.min(100, percentage))
   const offset = circumference - (clamped / 100) * circumference
 
-  const hue = 100 + clamped * 0.3
-  const activeColor = clamped > 70 ? '#22C55E' : clamped > 30 ? '#4ADE80' : clamped > 10 ? '#F59E0B' : '#EF4444'
+  const activeColor =
+    clamped > 70 ? '#34D399'    // emerald-400 — healthy
+    : clamped > 30 ? '#6EE7B7'  // emerald-300 — OK
+    : clamped > 10 ? '#FBBF24'  // amber-400 — dry
+    : '#F87171'                  // red-400 — very dry
+
+  const gradientId = `gauge-g-${Math.round(clamped)}`
 
   return (
     <div className="flex flex-col items-center">
       <div className="relative" style={{ width: size, height: size }}>
-        <svg width={size} height={size} className="-rotate-90">
+        <svg width={size} height={size} className="-rotate-90" aria-hidden="true">
           <defs>
-            <linearGradient id={`gauge-grad-${hue}`} x1="0%" y1="0%" x2="100%" y2="100%">
+            <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
               <stop offset="0%" stopColor={activeColor} stopOpacity={0.9} />
-              <stop offset="100%" stopColor={activeColor} stopOpacity={0.6} />
+              <stop offset="100%" stopColor={activeColor} stopOpacity={0.55} />
             </linearGradient>
           </defs>
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke="currentColor" strokeWidth={strokeWidth} className="text-forest/[.06]" />
           <circle
             cx={cx} cy={cy} r={r}
             fill="none"
-            stroke="currentColor"
-            strokeWidth={strokeWidth}
-            className="text-forest/6"
-          />
-          <circle
-            cx={cx} cy={cy} r={r}
-            fill="none"
-            stroke={`url(#gauge-grad-${hue})`}
+            stroke={`url(#${gradientId})`}
             strokeWidth={strokeWidth}
             strokeLinecap="round"
             strokeDasharray={circumference}
@@ -47,10 +46,10 @@ export function CircularGauge({ percentage, label, size = 170, strokeWidth = 10 
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="font-display text-4xl font-bold tabular-nums text-forest">
+          <span className="font-display text-4xl font-bold tabular-nums text-forest" aria-label={`${Math.round(clamped)} percent`}>
             {Math.round(clamped)}%
           </span>
-          <span className="mt-1 text-xs font-medium uppercase tracking-wider text-forest/45">
+          <span className="mt-1 text-xs font-medium uppercase tracking-wider text-forest-400">
             {label}
           </span>
         </div>

@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
+import { fadeSlideUp, staggerContainer, transition } from '../lib/motion'
+import { PlantIcon } from '../components/icons/PlantIcon'
 
 export function LoginPage() {
   const [email, setEmail] = useState('')
@@ -18,11 +21,8 @@ export function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      if (isSignUp) {
-        await signUp(email, password)
-      } else {
-        await signIn(email, password)
-      }
+      if (isSignUp) await signUp(email, password)
+      else await signIn(email, password)
       navigate(from, { replace: true })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Auth failed')
@@ -32,41 +32,50 @@ export function LoginPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-surface p-4">
-      {/* Decorative background elements */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -left-32 -top-32 h-96 w-96 rounded-full bg-primary/5 blur-3xl" />
-        <div className="absolute -bottom-40 -right-40 h-[500px] w-[500px] rounded-full bg-primary/4 blur-3xl" />
-        <div className="absolute left-1/2 top-1/3 h-64 w-64 -translate-x-1/2 rounded-full bg-primary/3 blur-3xl" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-surface px-4 py-12">
+      {/* Decorative ambient light */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+        <div className="absolute -left-32 -top-32 h-[420px] w-[420px] rounded-full bg-primary/[.04] blur-3xl" />
+        <div className="absolute -bottom-40 -right-40 h-[500px] w-[500px] rounded-full bg-primary/[.03] blur-3xl" />
+        <div className="absolute left-1/2 top-1/3 h-64 w-64 -translate-x-1/2 rounded-full bg-sage-200/40 blur-3xl" />
       </div>
 
-      <div className="relative w-full max-w-md">
-        {/* Brand header */}
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 shadow-glow">
-            <svg className="h-8 w-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 20V10" />
-              <path d="M12 10c-2.5 0-5 1.5-6 4-.4.8 0 1.6.6 2 1.5.8 3.4.2 4.6-1.2" />
-              <path d="M12 10c2.5 0 5 1.5 6 4 .4.8 0 1.6-.6 2-1.5.8-3.4.2-4.6-1.2" />
-            </svg>
+      <motion.div
+        className="relative w-full max-w-[420px]"
+        variants={staggerContainer}
+        initial="hidden"
+        animate="visible"
+      >
+        {/* Brand */}
+        <motion.div
+          className="mb-10 text-center"
+          variants={fadeSlideUp}
+          transition={transition.section}
+        >
+          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 shadow-glow">
+            <PlantIcon className="h-7 w-7 text-primary" />
           </div>
-          <h1 className="font-display text-3xl font-bold tracking-tight text-forest">
+          <h1 className="font-display text-[28px] font-bold tracking-tight text-forest">
             Smart Plant Pro
           </h1>
-          <p className="mt-2 text-sm text-forest/50">
+          <p className="mt-2 text-sm leading-relaxed text-forest-400">
             Intelligent plant monitoring, powered by IoT
           </p>
-        </div>
+        </motion.div>
 
-        {/* Login card */}
-        <div className="glass-card rounded-3xl p-8 shadow-card">
+        {/* Card */}
+        <motion.div
+          className="glass-card rounded-3xl p-7 shadow-card sm:p-8"
+          variants={fadeSlideUp}
+          transition={{ ...transition.section, delay: 0.08 }}
+        >
           <h2 className="mb-6 text-lg font-semibold text-forest">
             {isSignUp ? 'Create your account' : 'Welcome back'}
           </h2>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label htmlFor="email" className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-forest/50">
+              <label htmlFor="email" className="stat-label mb-1.5 block">
                 Email
               </label>
               <input
@@ -75,12 +84,13 @@ export function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                autoComplete="email"
                 className="input-field"
                 placeholder="you@example.com"
               />
             </div>
             <div>
-              <label htmlFor="password" className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-forest/50">
+              <label htmlFor="password" className="stat-label mb-1.5 block">
                 Password
               </label>
               <input
@@ -89,21 +99,30 @@ export function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                autoComplete={isSignUp ? 'new-password' : 'current-password'}
                 className="input-field"
                 placeholder="••••••••"
               />
             </div>
 
             {error && (
-              <div className="rounded-xl border border-terracotta/20 bg-terracotta-light px-4 py-2.5 text-sm text-terracotta">
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="rounded-xl border border-terracotta/20 bg-terracotta-light px-4 py-2.5 text-sm text-terracotta"
+                role="alert"
+              >
                 {error}
-              </div>
+              </motion.div>
             )}
 
-            <button type="submit" disabled={loading} className="btn-primary w-full disabled:opacity-60">
+            <button type="submit" disabled={loading} className="btn-primary w-full">
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
-                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
                   {isSignUp ? 'Creating account…' : 'Signing in…'}
                 </span>
               ) : (
@@ -112,22 +131,26 @@ export function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 border-t border-forest/5 pt-4">
+          <div className="mt-6 border-t border-forest/5 pt-5">
             <button
               type="button"
               onClick={() => { setIsSignUp((v) => !v); setError('') }}
-              className="w-full text-center text-sm text-forest/50 transition hover:text-primary"
+              className="w-full text-center text-sm text-forest-400 transition hover:text-primary"
             >
               {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
             </button>
           </div>
-        </div>
+        </motion.div>
 
         {/* Footer */}
-        <p className="mt-6 text-center text-xs text-forest/30">
+        <motion.p
+          className="mt-8 text-center text-xs text-forest-300"
+          variants={fadeSlideUp}
+          transition={{ ...transition.section, delay: 0.16 }}
+        >
           ESP32-powered plant monitoring &middot; Real-time Firebase sync
-        </p>
-      </div>
+        </motion.p>
+      </motion.div>
     </div>
   )
 }

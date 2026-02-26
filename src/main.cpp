@@ -250,9 +250,9 @@ void setup() {
   wm.addParameter(&p_fb_pw);
   wm.addParameter(&p_fb_close);
 
-  // WiFi validation: retry 3 times before falling back to portal
-  wm.setConnectRetries(3);
-  wm.setSaveConnectTimeout(15);
+  wm.setConnectRetries(2);
+  wm.setConnectTimeout(10);
+  wm.setSaveConnectTimeout(10);
   wm.setConfigPortalTimeout(0);
 
   if (!wm.autoConnect("SmartPlantPro")) {
