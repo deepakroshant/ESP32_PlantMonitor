@@ -375,9 +375,15 @@ export function DashboardPage() {
     const controls = animate(displayGaugePct, gaugePct, { duration: 0.7, onUpdate: (v) => setDisplayGaugePct(v) })
     return () => controls.stop()
   }, [gaugePct])
+  // Tick every 5s so offline/stale detection stays current even without new data
+  const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000))
+  useEffect(() => {
+    const id = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 5000)
+    return () => clearInterval(id)
+  }, [])
+
   const showProTip = temp != null && !Number.isNaN(temp) && temp > 28
   const healthOk = (readings?.health ?? '').toLowerCase() === 'ok'
-  const nowSec = Math.floor(Date.now() / 1000)
   const lastSeenSec = readings?.timestamp ?? 0
   const tsLooksValid = lastSeenSec > 1577836800
   const secondsAgo = tsLooksValid ? nowSec - lastSeenSec : Infinity
