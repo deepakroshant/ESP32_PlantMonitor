@@ -55,15 +55,19 @@ export default {
         '5xl': '2.5rem',
       },
       boxShadow: {
-        card:   '0 1px 3px rgba(27,47,39,0.04), 0 8px 24px rgba(27,47,39,0.06)',
-        glow:   '0 0 40px rgba(59,122,87,0.12)',
+        card:   '0 1px 2px rgba(27,47,39,0.03), 0 4px 12px rgba(27,47,39,0.05), 0 16px 32px rgba(27,47,39,0.04)',
+        lift:   '0 2px 8px rgba(27,47,39,0.06), 0 16px 40px rgba(27,47,39,0.10)',
+        glow:   '0 0 40px rgba(59,122,87,0.14)',
         soft:   '0 1px 2px rgba(27,47,39,0.03)',
         inner:  'inset 0 2px 4px rgba(27,47,39,0.04)',
-        modal:  '0 24px 48px -12px rgba(27,47,39,0.18)',
+        modal:  '0 32px 64px -16px rgba(27,47,39,0.22), 0 8px 24px rgba(27,47,39,0.08)',
+        gauge:  '0 0 20px rgba(59,122,87,0.18)',
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-        'hero-mesh': 'linear-gradient(135deg, rgba(59,122,87,0.04) 0%, rgba(27,47,39,0.02) 50%, rgba(59,122,87,0.03) 100%)',
+        'hero-mesh':  'linear-gradient(135deg, rgba(59,122,87,0.04) 0%, rgba(27,47,39,0.02) 50%, rgba(59,122,87,0.03) 100%)',
+        'page-bg':    'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(59,122,87,0.07) 0%, transparent 60%), radial-gradient(ellipse 60% 40% at 80% 80%, rgba(59,122,87,0.04) 0%, transparent 50%)',
+        'logo-mark':  'linear-gradient(135deg, #4a9b6d 0%, #2f6347 60%, #1c3d2c 100%)',
       },
       animation: {
         'fade-in':    'fadeIn 0.4s ease-out',

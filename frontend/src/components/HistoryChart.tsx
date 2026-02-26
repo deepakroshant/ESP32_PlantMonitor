@@ -23,10 +23,10 @@ type HistoryEntry = {
 type SeriesKey = 'temperature' | 'soilRaw' | 'pressure' | 'humidity'
 
 const SERIES_META: Record<SeriesKey, { label: string; color: string; unit: string; yAxisId: string }> = {
-  temperature: { label: 'Temperature', color: '#F59E0B', unit: '°C', yAxisId: 'temp' },
-  soilRaw:     { label: 'Soil raw',    color: '#22C55E', unit: '',   yAxisId: 'soil' },
+  temperature: { label: 'Temperature', color: '#F59E0B', unit: '°C',  yAxisId: 'temp'     },
+  soilRaw:     { label: 'Soil raw',    color: '#3B7A57', unit: '',    yAxisId: 'soil'     },
   pressure:    { label: 'Pressure',    color: '#6366F1', unit: ' hPa', yAxisId: 'pressure' },
-  humidity:    { label: 'Humidity',    color: '#06B6D4', unit: '%',  yAxisId: 'temp' },
+  humidity:    { label: 'Humidity',    color: '#06B6D4', unit: '%',   yAxisId: 'temp'     },
 }
 
 const RANGES = [
@@ -103,10 +103,10 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
 
   if (loading) {
     return (
-      <div className="section-card mt-6">
+      <div className="section-card mt-5">
         <p className="stat-label mb-3">Readings history</p>
         <div className="flex h-48 items-center justify-center">
-          <span className="text-sm text-forest/40">Loading history…</span>
+          <span className="text-sm text-forest/35">Loading history…</span>
         </div>
       </div>
     )
@@ -114,10 +114,10 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
 
   if (raw.length === 0) {
     return (
-      <div className="section-card mt-6">
+      <div className="section-card mt-5">
         <p className="stat-label mb-3">Readings history</p>
         <div className="flex h-32 items-center justify-center">
-          <p className="text-sm text-forest/40">
+          <p className="text-sm text-forest/35 text-center px-4">
             No history data yet. The device records a snapshot every ~5 minutes.
           </p>
         </div>
@@ -128,19 +128,19 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
   const showPressureAxis = hasPressure && visibleSeries.pressure
 
   return (
-    <div className="section-card mt-6">
+    <div className="section-card mt-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <p className="stat-label">Readings history</p>
-        <div className="flex gap-1 rounded-xl bg-surface p-0.5">
+        <div className="flex gap-0.5 rounded-xl bg-surface p-1 shadow-inner">
           {RANGES.map((r, i) => (
             <button
               key={r.label}
               type="button"
               onClick={() => setRangeIdx(i)}
-              className={`rounded-lg px-3 py-1 text-xs font-medium transition ${
+              className={`rounded-lg px-3 py-1 text-xs font-medium transition-all ${
                 i === rangeIdx
-                  ? 'bg-white text-forest shadow-sm'
-                  : 'text-forest/40 hover:text-forest/70'
+                  ? 'bg-white text-forest shadow-soft'
+                  : 'text-forest/35 hover:text-forest/60'
               }`}
             >
               {r.label}
@@ -151,7 +151,7 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
 
       {/* Series toggles */}
       {availableSeries.length > 2 && (
-        <div className="mb-3 flex flex-wrap gap-1.5">
+        <div className="mb-4 flex flex-wrap gap-1.5">
           {availableSeries.map((key) => {
             const meta = SERIES_META[key]
             const active = visibleSeries[key]
@@ -160,14 +160,14 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
                 key={key}
                 type="button"
                 onClick={() => toggleSeries(key)}
-                className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
+                className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-all ${
                   active
-                    ? 'bg-white text-forest shadow-sm'
-                    : 'text-forest/30 hover:text-forest/50'
+                    ? 'border-forest/10 bg-white text-forest shadow-soft'
+                    : 'border-transparent text-forest/30 hover:text-forest/50'
                 }`}
               >
                 <span
-                  className="inline-block h-2 w-2 rounded-full"
+                  className="inline-block h-2 w-2 rounded-full transition-colors"
                   style={{ backgroundColor: active ? meta.color : 'rgba(20,51,42,0.15)' }}
                 />
                 {meta.label}
@@ -225,12 +225,13 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
             )}
             <Tooltip
               contentStyle={{
-                background: 'rgba(255,255,255,0.9)',
-                backdropFilter: 'blur(8px)',
-                border: '1px solid rgba(20,51,42,0.08)',
-                borderRadius: 12,
+                background: 'rgba(255,255,255,0.94)',
+                backdropFilter: 'blur(12px)',
+                WebkitBackdropFilter: 'blur(12px)',
+                border: '1px solid rgba(27,47,39,0.07)',
+                borderRadius: 14,
                 fontSize: 12,
-                boxShadow: '0 4px 12px rgba(20,51,42,0.06)',
+                boxShadow: '0 4px 16px rgba(27,47,39,0.08), 0 1px 3px rgba(27,47,39,0.04)',
               }}
               labelFormatter={(v) => formatTime(v as number)}
               formatter={(value?: number | string, name?: string) => {

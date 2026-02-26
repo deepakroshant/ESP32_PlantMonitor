@@ -3,6 +3,7 @@ import type { DeviceStatus, Readings } from '../../types'
 import { CircularGauge } from '../CircularGauge'
 import { ThermometerIcon } from '../icons/ThermometerIcon'
 import { SunIcon } from '../icons/SunIcon'
+import { staggerContainer, cardItem } from '../../lib/motion'
 
 type Props = {
   deviceStatus: DeviceStatus
@@ -18,10 +19,13 @@ type Props = {
 
 function LiveDot() {
   return (
-    <div
-      className="absolute right-3 top-3 h-1.5 w-1.5 rounded-full bg-green-400 shadow-[0_0_6px_rgba(34,197,94,0.4)]"
+    <span
+      className="absolute right-4 top-4 flex h-2 w-2"
       aria-hidden="true"
-    />
+    >
+      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-60" />
+      <span className="relative inline-flex h-2 w-2 rounded-full bg-green-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]" />
+    </span>
   )
 }
 
@@ -35,8 +39,8 @@ function FrozenOverlay({ deviceStatus }: { deviceStatus: DeviceStatus }) {
 
   return (
     <div className="pointer-events-none absolute -inset-1 z-10 flex items-start justify-center rounded-3xl">
-      <div className="pointer-events-auto mt-20 rounded-2xl bg-white/95 px-5 py-3 shadow-lg backdrop-blur-sm">
-        <p className="text-center text-sm font-semibold text-forest/60">{text}</p>
+      <div className="pointer-events-auto mt-24 rounded-2xl bg-white/95 px-5 py-3 shadow-lift backdrop-blur-sm">
+        <p className="text-center text-sm font-semibold text-forest/55">{text}</p>
       </div>
     </div>
   )
@@ -47,10 +51,7 @@ function BarometerIcon({ className }: { className?: string }) {
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="9" />
       <path d="M12 7v5l3 3" />
-      <path d="M12 3v1" />
-      <path d="M12 20v1" />
-      <path d="M3 12h1" />
-      <path d="M20 12h1" />
+      <path d="M12 3v1M12 20v1M3 12h1M20 12h1" />
     </svg>
   )
 }
@@ -72,86 +73,107 @@ export function SensorGrid({
   displayTemp, temp, displayGaugePct, soilLabel,
   readings, selectedMac,
 }: Props) {
-  const isLive = deviceStatus === 'live'
+  const isLive      = deviceStatus === 'live'
   const hasPressure = readings?.pressure != null && !Number.isNaN(readings.pressure)
-  const hasHumidity = readings?.humidity != null && !Number.isNaN(readings.humidity)
+  const hasHumidity = readings?.humidity  != null && !Number.isNaN(readings.humidity)
+
+  const gridOpacity = dataUntrusted ? 0.32 : isDelayed ? 0.68 : 1
 
   return (
-    <div className="relative">
+    <div className="relative mb-5">
       {dataUntrusted && <FrozenOverlay deviceStatus={deviceStatus} />}
 
       <motion.div
         key={`gauges-${selectedMac}`}
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: dataUntrusted ? 0.35 : isDelayed ? 0.7 : 1, y: 0 }}
-        transition={{ duration: 0.3, delay: 0.05 }}
-        className={`grid gap-4 sm:grid-cols-2 lg:grid-cols-3 transition-all duration-500 ${
-          dataUntrusted
-            ? 'pointer-events-none select-none blur-[1px] grayscale-[40%]'
-            : isDelayed
-              ? 'grayscale-[15%]'
-              : ''
+        variants={staggerContainer}
+        initial="hidden"
+        animate={{ ...{ opacity: gridOpacity, y: 0 }, transition: { staggerChildren: 0.07 } }}
+        className={`grid grid-cols-1 gap-4 sm:grid-cols-2 transition-all duration-500 ${
+          dataUntrusted ? 'pointer-events-none select-none blur-[1px] grayscale-[50%]' : isDelayed ? 'grayscale-[20%]' : ''
         }`}
       >
         {/* Temperature */}
-        <div className="section-card relative overflow-hidden">
-          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+        <motion.div
+          variants={cardItem}
+          whileHover={dataUntrusted ? {} : { y: -2 }}
+          className="sensor-card relative overflow-hidden"
+        >
+          {isLive && <LiveDot />}
+          <div className="icon-pill mb-4">
             <ThermometerIcon className="h-5 w-5 text-primary" />
           </div>
-          <p className="stat-label mb-1">Temperature</p>
-          <p className="font-display text-2xl font-bold tabular-nums text-forest">
-            {temp != null && !Number.isNaN(temp) ? `${displayTemp.toFixed(1)}°C` : '—'}
+          <p className="stat-label mb-2">Temperature</p>
+          <p className="font-display text-3xl font-bold tabular-nums text-forest leading-none">
+            {temp != null && !Number.isNaN(temp) ? `${displayTemp.toFixed(1)}°` : '—'}
+            {temp != null && !Number.isNaN(temp) && (
+              <span className="ml-1 text-base font-medium text-forest-400">C</span>
+            )}
           </p>
-          {isLive && <LiveDot />}
-        </div>
-
-        {/* Soil moisture gauge */}
-        <div className="section-card relative overflow-hidden lg:col-span-2">
-          <p className="stat-label mb-4 text-center">Soil moisture</p>
-          <CircularGauge percentage={displayGaugePct} label={soilLabel} size={170} strokeWidth={10} />
-          {isLive && <LiveDot />}
-        </div>
-
-        {/* Pressure — shown when firmware sends it */}
-        {hasPressure && (
-          <div className="section-card relative overflow-hidden">
-            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-              <BarometerIcon className="h-5 w-5 text-primary" />
-            </div>
-            <p className="stat-label mb-1">Pressure</p>
-            <p className="font-display text-2xl font-bold tabular-nums text-forest">
-              {formatPressure(readings!.pressure!)}
-              <span className="ml-1 text-sm font-medium text-forest-400">hPa</span>
-            </p>
-            {isLive && <LiveDot />}
-          </div>
-        )}
+        </motion.div>
 
         {/* Light */}
-        <div className="section-card relative overflow-hidden">
-          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+        <motion.div
+          variants={cardItem}
+          whileHover={dataUntrusted ? {} : { y: -2 }}
+          className="sensor-card relative overflow-hidden"
+        >
+          {isLive && <LiveDot />}
+          <div className="icon-pill mb-4">
             <SunIcon className="h-5 w-5 text-primary" />
           </div>
-          <p className="stat-label mb-1">Light</p>
-          <p className="font-display text-xl font-bold text-forest">
+          <p className="stat-label mb-2">Light</p>
+          <p className="font-display text-3xl font-bold text-forest leading-none">
             {readings?.lightBright === true ? 'Bright' : readings?.lightBright === false ? 'Dim' : '—'}
           </p>
-          {isLive && <LiveDot />}
-        </div>
+        </motion.div>
 
-        {/* Humidity — shown only when sensor is BME280 */}
+        {/* Soil moisture — full width */}
+        <motion.div
+          variants={cardItem}
+          whileHover={dataUntrusted ? {} : { y: -2 }}
+          className="sensor-card relative overflow-hidden sm:col-span-2"
+        >
+          {isLive && <LiveDot />}
+          <p className="stat-label mb-5 text-center">Soil moisture</p>
+          <CircularGauge percentage={displayGaugePct} label={soilLabel} size={180} strokeWidth={11} />
+        </motion.div>
+
+        {/* Pressure — optional */}
+        {hasPressure && (
+          <motion.div
+            variants={cardItem}
+            whileHover={dataUntrusted ? {} : { y: -2 }}
+            className="sensor-card relative overflow-hidden"
+          >
+            {isLive && <LiveDot />}
+            <div className="icon-pill mb-4">
+              <BarometerIcon className="h-5 w-5 text-primary" />
+            </div>
+            <p className="stat-label mb-2">Pressure</p>
+            <p className="font-display text-3xl font-bold tabular-nums text-forest leading-none">
+              {formatPressure(readings!.pressure!)}
+              <span className="ml-1 text-base font-medium text-forest-400">hPa</span>
+            </p>
+          </motion.div>
+        )}
+
+        {/* Humidity — optional (BME280) */}
         {hasHumidity && (
-          <div className="section-card relative overflow-hidden">
-            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+          <motion.div
+            variants={cardItem}
+            whileHover={dataUntrusted ? {} : { y: -2 }}
+            className="sensor-card relative overflow-hidden"
+          >
+            {isLive && <LiveDot />}
+            <div className="icon-pill mb-4">
               <DropletIcon className="h-5 w-5 text-primary" />
             </div>
-            <p className="stat-label mb-1">Humidity</p>
-            <p className="font-display text-2xl font-bold tabular-nums text-forest">
+            <p className="stat-label mb-2">Humidity</p>
+            <p className="font-display text-3xl font-bold tabular-nums text-forest leading-none">
               {readings!.humidity!.toFixed(1)}
-              <span className="ml-1 text-sm font-medium text-forest-400">%</span>
+              <span className="ml-1 text-base font-medium text-forest-400">%</span>
             </p>
-            {isLive && <LiveDot />}
-          </div>
+          </motion.div>
         )}
       </motion.div>
     </div>

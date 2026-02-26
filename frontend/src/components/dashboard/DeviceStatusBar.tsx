@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import type { DeviceStatus, Readings } from '../../types'
 import type { StatusMeta } from '../../utils/deviceStatus'
+import { fadeSlideUp } from '../../lib/motion'
 
 type Props = {
   devices: string[]
@@ -22,30 +23,34 @@ export function DeviceStatusBar({
 }: Props) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={`mb-6 rounded-3xl border ${meta.border} ${meta.bg} p-4 transition-colors duration-500 sm:p-5`}
+      variants={fadeSlideUp}
+      initial="hidden"
+      animate="visible"
+      className={`mb-5 rounded-3xl border ${meta.border} ${meta.bg} p-4 transition-colors duration-500 sm:p-5`}
+      style={{ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
     >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        {/* Device selector + reset */}
         <div className="flex items-center gap-2">
           <select
             value={selectedMac}
             onChange={(e) => onSelectMac(e.target.value)}
-            className="rounded-xl border border-forest/10 bg-white/80 px-3 py-2 font-mono text-xs text-forest focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 sm:text-sm"
+            className="rounded-xl border border-forest/10 bg-white/85 px-3 py-2 font-mono text-xs text-forest shadow-soft focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/15 sm:text-sm"
             aria-label="Select device"
           >
             {devices.map((mac) => (
               <option key={mac} value={mac}>{mac}</option>
             ))}
           </select>
+
           <button
             type="button"
             onClick={onResetWiFi}
             disabled={isResetPending}
-            className={`rounded-xl border px-3 py-2 text-xs font-medium transition ${
+            className={`rounded-xl border px-3 py-2 text-xs font-medium transition-all ${
               isResetPending
                 ? 'cursor-not-allowed border-forest/10 bg-white/40 text-forest/30'
-                : 'border-red-200 bg-white/60 text-red-500 hover:bg-red-50'
+                : 'border-red-200/70 bg-white/70 text-red-500 hover:bg-red-50 hover:border-red-300'
             }`}
             title="Device will clear its WiFi config and restart in AP mode"
           >
@@ -54,30 +59,30 @@ export function DeviceStatusBar({
         </div>
 
         {/* Status badge */}
-        <div className="flex items-center gap-2">
-          <span className="relative flex h-2.5 w-2.5" aria-hidden="true">
+        <div className="flex items-center gap-2 rounded-full bg-white/50 px-3 py-1.5">
+          <span className="relative flex h-2 w-2" aria-hidden="true">
             {meta.pulse && (
-              <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${meta.dotColor}`} />
+              <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-70 ${meta.dotColor}`} />
             )}
-            <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${meta.dotColor}`} />
+            <span className={`relative inline-flex h-2 w-2 rounded-full ${meta.dotColor}`} />
           </span>
-          <span className={`text-sm font-semibold ${meta.color}`}>{meta.label}</span>
+          <span className={`text-xs font-semibold tracking-wide ${meta.color}`}>{meta.label}</span>
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        <p className={`text-xs ${meta.color} opacity-80`}>{statusDescription}</p>
+        <p className={`text-xs ${meta.color} opacity-75`}>{statusDescription}</p>
         {readings?.wifiSSID && (
           <p className="text-xs text-forest-400">
             {deviceStatus === 'live' ? 'WiFi: ' : 'Last WiFi: '}
             <span className="font-medium text-forest-500">{readings.wifiSSID}</span>
             {readings.wifiRSSI != null && deviceStatus === 'live' && (
-              <span className="ml-1">({readings.wifiRSSI} dBm)</span>
+              <span className="ml-1 opacity-60">({readings.wifiRSSI} dBm)</span>
             )}
           </p>
         )}
         {lastUpdated && deviceStatus === 'live' && (
-          <p className="text-xs text-forest/35">Updated at {lastUpdated}</p>
+          <p className="text-xs text-forest/30">Updated {lastUpdated}</p>
         )}
       </div>
     </motion.div>

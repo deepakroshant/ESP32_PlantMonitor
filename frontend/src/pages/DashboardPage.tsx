@@ -16,6 +16,7 @@ import { DeviceStatusBar } from '../components/dashboard/DeviceStatusBar'
 import { StatusBanners } from '../components/dashboard/StatusBanners'
 import { PlantHero } from '../components/dashboard/PlantHero'
 import { SensorGrid } from '../components/dashboard/SensorGrid'
+import { fadeSlideUp, fadeScale, spring } from '../lib/motion'
 
 const EXAMPLE_PLANTS = [
   { id: 'mint', label: 'Mint', targetSoil: 2000 },
@@ -325,19 +326,28 @@ export function DashboardPage() {
 
   // ── Render ──
   return (
-    <div className="min-h-screen bg-surface p-4 md:p-6 lg:p-8">
+    <div className="min-h-screen p-4 md:p-6 lg:p-8">
       <div className="mx-auto max-w-4xl">
         {/* Header */}
-        <header className="mb-8 flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-white/60 px-4 py-3 shadow-card backdrop-blur-sm sm:px-6 sm:py-4">
+        <motion.header
+          variants={fadeSlideUp}
+          initial="hidden"
+          animate="visible"
+          className="mb-7 flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-white/80 px-4 py-3 shadow-card backdrop-blur-md sm:px-6 sm:py-4"
+          style={{ border: '1px solid rgba(27,47,39,0.06)' }}
+        >
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-600 shadow-sm">
+            <div
+              className="flex h-9 w-9 items-center justify-center rounded-xl shadow-sm"
+              style={{ background: 'linear-gradient(135deg, #4a9b6d 0%, #2f6347 65%, #1c3d2c 100%)' }}
+            >
               <PlantIcon className="h-4.5 w-4.5 text-white" />
             </div>
             <h1 className="font-display text-lg font-bold tracking-tight text-forest sm:text-xl">Smart Plant Pro</h1>
           </div>
           <div className="flex items-center gap-2">
             {user && (
-              <div className="hidden items-center gap-2 rounded-xl bg-surface px-3 py-1.5 sm:flex">
+              <div className="hidden items-center gap-2 rounded-xl border border-forest/5 bg-surface px-3 py-1.5 sm:flex">
                 <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
                   {(user.displayName || user.email || 'U')[0].toUpperCase()}
                 </div>
@@ -345,17 +355,17 @@ export function DashboardPage() {
               </div>
             )}
             <Link to="/claim" className="btn-ghost flex items-center gap-1.5 !py-2 !px-3 !text-xs"><PlusIcon className="h-3.5 w-3.5" /><span className="hidden sm:inline">Add device</span></Link>
-            <button onClick={() => signOut()} className="btn-ghost flex items-center gap-1.5 !py-2 !px-3 !text-xs text-forest/50 hover:text-red-500"><LogoutIcon className="h-3.5 w-3.5" /><span className="hidden sm:inline">Sign out</span></button>
+            <button onClick={() => signOut()} className="btn-ghost flex items-center gap-1.5 !py-2 !px-3 !text-xs text-forest/45 hover:text-red-500"><LogoutIcon className="h-3.5 w-3.5" /><span className="hidden sm:inline">Sign out</span></button>
           </div>
-        </header>
+        </motion.header>
 
         {myDevices.length === 0 ? (
-          <div className="section-card flex flex-col items-center justify-center p-12 text-center">
-            <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 shadow-glow"><PlusIcon className="h-7 w-7 text-primary" /></div>
-            <p className="mb-2 font-display text-lg font-semibold text-forest">No devices yet</p>
+          <motion.div variants={fadeSlideUp} initial="hidden" animate="visible" className="section-card flex flex-col items-center justify-center p-14 text-center">
+            <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 shadow-glow ring-1 ring-primary/10"><PlusIcon className="h-7 w-7 text-primary" /></div>
+            <p className="mb-2 font-display text-lg font-bold text-forest">No devices yet</p>
             <p className="mb-6 text-sm text-forest-400">Add your first plant monitor to get started.</p>
             <Link to="/claim" className="btn-primary">Add a device</Link>
-          </div>
+          </motion.div>
         ) : (
           <>
             <DeviceStatusBar
@@ -422,24 +432,24 @@ export function DashboardPage() {
               />
 
               {/* Alert + notification toggle */}
-              <div className="mb-4 space-y-3">
+              <div className="mb-5 space-y-3">
                 {lastAlert && (
-                  <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex items-start gap-3 rounded-2xl border border-terracotta/20 bg-terracotta-light/60 px-4 py-3">
-                    <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-terracotta/15">
+                  <motion.div variants={fadeSlideUp} initial="hidden" animate="visible" className="flex items-start gap-3 rounded-2xl border border-terracotta/18 bg-red-50/70 px-4 py-3.5">
+                    <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-terracotta/12">
                       <svg className="h-3.5 w-3.5 text-terracotta" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 15.75h.008" /></svg>
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-forest">{lastAlert.message}</p>
-                      {lastAlert.timestamp > 0 && <p className="mt-0.5 text-xs text-forest-400">{new Date(lastAlert.timestamp * 1000).toLocaleString()}</p>}
+                      {lastAlert.timestamp > 0 && <p className="mt-0.5 text-xs text-forest/40">{new Date(lastAlert.timestamp * 1000).toLocaleString()}</p>}
                     </div>
                     <button type="button" onClick={handleAckAlert} className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium text-terracotta transition hover:bg-terracotta/10">Dismiss</button>
                   </motion.div>
                 )}
-                <div className="flex items-center gap-3 rounded-2xl border border-forest/5 bg-white/60 px-4 py-2.5">
-                  <svg className="h-4 w-4 shrink-0 text-forest-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>
+                <div className="flex items-center gap-3 rounded-2xl border border-forest/5 bg-white/70 px-4 py-3">
+                  <svg className="h-4 w-4 shrink-0 text-forest/25" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>
                   <span className="flex-1 text-xs text-forest-400">{'Notification' in window && Notification.permission === 'denied' ? 'Notifications blocked by browser' : 'Notify me when plant health drops'}</span>
-                  <button type="button" onClick={handleToggleNotifications} disabled={'Notification' in window && Notification.permission === 'denied'} className={`relative h-6 w-11 rounded-full transition-colors ${notificationsEnabled ? 'bg-primary' : 'bg-forest/15'} disabled:cursor-not-allowed disabled:opacity-40`} aria-label="Toggle browser notifications">
-                    <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${notificationsEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                  <button type="button" onClick={handleToggleNotifications} disabled={'Notification' in window && Notification.permission === 'denied'} className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${notificationsEnabled ? 'bg-primary shadow-glow' : 'bg-forest/12'} disabled:cursor-not-allowed disabled:opacity-40`} aria-label="Toggle browser notifications">
+                    <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${notificationsEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
                   </button>
                 </div>
               </div>
@@ -458,59 +468,63 @@ export function DashboardPage() {
 
               {/* History chart */}
               {selectedMac && !dataUntrusted && (
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.06 }}>
+                <motion.div variants={fadeSlideUp} initial="hidden" animate="visible" transition={spring.gentle}>
                   <HistoryChart deviceMac={selectedMac} />
                 </motion.div>
               )}
 
               {/* Pump control */}
-              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.08 }} className="mt-4 flex items-center gap-4 section-card !p-4">
-                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${pumpActive ? 'bg-primary/20' : 'bg-forest/5'}`}>
-                  <svg className={`h-5 w-5 transition-colors ${pumpActive ? 'text-primary' : 'text-forest/30'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" /></svg>
+              <motion.div variants={fadeSlideUp} initial="hidden" animate="visible" transition={spring.gentle} className="mt-5 flex items-center gap-4 section-card !p-5">
+                <div className={`icon-pill shrink-0 transition-all duration-300 ${pumpActive ? '!bg-primary/18 ring-1 ring-primary/20' : ''}`}>
+                  <svg className={`h-5 w-5 transition-colors duration-300 ${pumpActive ? 'text-primary' : 'text-forest/30'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" /></svg>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-forest">Water pump</p>
-                  <p className="text-xs text-forest-400">{pumpActive ? 'Pump is running…' : 'Send a manual watering pulse to the device.'}</p>
+                  <p className="text-sm font-semibold text-forest">Water pump</p>
+                  <p className="mt-0.5 text-xs text-forest-400">{pumpActive ? 'Pump is running…' : 'Send a manual watering pulse to the device.'}</p>
                 </div>
-                <button type="button" onClick={handleTriggerPump} disabled={pumpCooldown || dataUntrusted} className={`shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition ${pumpActive ? 'bg-primary/15 text-primary' : pumpCooldown ? 'bg-forest/5 text-forest/30' : 'bg-primary text-white hover:bg-primary-600 shadow-sm'} disabled:opacity-50`}>
-                  {pumpActive ? 'Running…' : pumpCooldown ? 'Sent' : 'Water now'}
+                <button type="button" onClick={handleTriggerPump} disabled={pumpCooldown || dataUntrusted} className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all ${pumpActive ? 'bg-primary/12 text-primary ring-1 ring-primary/20' : pumpCooldown ? 'bg-forest/5 text-forest/30' : 'btn-primary !rounded-xl'} disabled:opacity-50`}>
+                  {pumpActive ? 'Running…' : pumpCooldown ? 'Sent ✓' : 'Water now'}
                 </button>
               </motion.div>
 
               {showProTip && (
-                <div className="mt-6 rounded-2xl border border-terracotta/15 bg-terracotta-light/50 p-4">
-                  <p className="text-sm font-medium text-terracotta">Pro tip</p>
-                  <p className="mt-1 text-sm text-forest-400">Temperature is above 28 °C. Consider lowering the target moisture threshold so the plant doesn't get overwatered in the heat.</p>
-                </div>
+                <motion.div variants={fadeSlideUp} initial="hidden" animate="visible" className="mt-5 rounded-2xl border border-amber-200/50 bg-amber-50/60 p-4">
+                  <p className="text-sm font-semibold text-amber-700">💡 Pro tip</p>
+                  <p className="mt-1 text-sm text-forest-500">Temperature is above 28 °C. Consider lowering the target moisture threshold so the plant doesn't get overwatered in the heat.</p>
+                </motion.div>
               )}
 
               {/* Target moisture */}
-              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }} className="section-card mt-6">
-                <p className="mb-1 stat-label">Target moisture (raw threshold)</p>
-                <p className="mb-3 text-sm text-forest-400">Soil raw below this = "wet enough". Drag to set target.</p>
+              <motion.div variants={fadeSlideUp} initial="hidden" animate="visible" transition={spring.gentle} className="section-card mt-5">
+                <p className="mb-1 stat-label">Target moisture</p>
+                <p className="mb-4 text-sm text-forest-400">Soil raw below this value = "wet enough". Drag to set.</p>
                 <div className="flex flex-wrap items-center gap-4">
                   <input type="range" min={0} max={4095} value={targetSoil} onChange={(e) => { const v = Number(e.target.value); setTargetSoil(v); setTargetSoilInput(String(v)) }} className="moisture-slider min-w-0 flex-1" aria-label="Target moisture raw value" />
-                  <span className="w-16 text-right text-lg font-semibold tabular-nums text-forest">{targetSoil}</span>
+                  <span className="w-16 text-right font-display text-xl font-bold tabular-nums text-forest">{targetSoil}</span>
                   <button onClick={handleSaveTarget} className="btn-primary">Save</button>
                 </div>
-                <p className="mt-3 text-xs text-forest-400">Pump control is optional (no hardware). When enabled, the device pulses the pump until soilRaw ≤ target.</p>
+                <p className="mt-3 text-xs text-forest/35">Pump control is optional. When enabled, the device pulses the pump until soilRaw ≤ target.</p>
               </motion.div>
 
               {/* Calibrate soil */}
-              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.08 }} className="section-card mt-6">
+              <motion.div variants={fadeSlideUp} initial="hidden" animate="visible" transition={spring.gentle} className="section-card mt-4">
                 <p className="mb-1 stat-label">Calibrate soil sensor</p>
-                <p className="mb-3 text-sm text-forest-400">Mark one dry and one wet reading so the gauge uses your sensor range. Current raw: {readings?.soilRaw ?? '—'}</p>
+                <p className="mb-3 text-sm text-forest-400">Mark one dry and one wet reading so the gauge uses your exact sensor range. Current raw: <span className="font-mono font-medium text-forest">{readings?.soilRaw ?? '—'}</span></p>
                 <div className="flex flex-wrap items-center gap-2">
                   <button type="button" onClick={handleMarkDry} disabled={readings?.soilRaw == null} className="btn-ghost disabled:opacity-40">Mark as dry</button>
                   <button type="button" onClick={handleMarkWet} disabled={readings?.soilRaw == null} className="btn-ghost disabled:opacity-40">Mark as wet</button>
-                  {(calibration.boneDry != null || calibration.submerged != null) && <span className="text-xs text-forest-400">Dry: {calibration.boneDry ?? '—'} · Wet: {calibration.submerged ?? '—'}</span>}
+                  {(calibration.boneDry != null || calibration.submerged != null) && (
+                    <span className="rounded-lg bg-surface px-2.5 py-1 text-xs text-forest-400">
+                      Dry: <span className="font-mono font-medium">{calibration.boneDry ?? '—'}</span> · Wet: <span className="font-mono font-medium">{calibration.submerged ?? '—'}</span>
+                    </span>
+                  )}
                 </div>
               </motion.div>
 
               {/* Plant profiles */}
-              <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.06 }} className="section-card mt-6">
+              <motion.section variants={fadeSlideUp} initial="hidden" animate="visible" transition={spring.gentle} className="section-card mt-5">
                 <h2 className="stat-label mb-1">Plant profiles</h2>
-                <p className="mb-4 text-sm text-forest-400">Add profiles for different plants. Link one to this device to show its name and type above.</p>
+                <p className="mb-4 text-sm text-forest-400">Add profiles for different plants. Link one to this device to track its name and type.</p>
                 <form onSubmit={addNewProfile} className="mb-4 flex flex-wrap items-center gap-2">
                   <input type="text" value={newProfileName} onChange={(e) => setNewProfileName(e.target.value)} placeholder="Plant name" className="input-field" />
                   <select value={newProfilePresetId ?? ''} onChange={(e) => { const id = e.target.value || null; setNewProfilePresetId(id); setNewProfileType(id ? EXAMPLE_PLANTS.find((p) => p.id === id)?.label ?? '' : '') }} className="input-field">
@@ -521,18 +535,20 @@ export function DashboardPage() {
                   <button type="submit" className="btn-primary">Add profile</button>
                 </form>
                 {Object.keys(profiles).length === 0 ? (
-                  <p className="text-xs text-forest-400">No plant profiles yet. Add one above.</p>
+                  <p className="text-xs text-forest/35">No plant profiles yet. Add one above.</p>
                 ) : (
                   <ul className="space-y-2">
                     {Object.entries(profiles).sort(([, a], [, b]) => (a.createdAt ?? 0) - (b.createdAt ?? 0)).map(([id, p]) => (
-                      <li key={id} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-forest/10 bg-surface/50 px-3 py-2">
-                        <span className="font-medium text-forest">{p.name}</span>
-                        {p.type && p.type !== '—' && <span className="text-xs text-forest-400">{p.type}</span>}
-                        {linkedProfileId === id && <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">Linked</span>}
+                      <li key={id} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-forest/8 bg-surface/60 px-4 py-3 transition-colors hover:bg-white/80">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-forest">{p.name}</span>
+                          {p.type && p.type !== '—' && <span className="rounded-md bg-sage-100 px-2 py-0.5 text-xs text-forest-400">{p.type}</span>}
+                          {linkedProfileId === id && <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">Linked</span>}
+                        </div>
                         <div className="ml-auto flex items-center gap-1">
-                          {linkedProfileId !== id && selectedMac && <button type="button" onClick={() => linkProfileToDevice(id)} className="rounded-xl bg-primary/15 px-2 py-1 text-xs font-medium text-primary transition hover:bg-primary/25">Use for this device</button>}
-                          <button type="button" onClick={() => openEditPlant(id)} className="rounded-full p-1.5 text-forest/50 transition hover:bg-sage-100 hover:text-forest" aria-label="Edit profile"><PencilIcon className="h-4 w-4" /></button>
-                          <button type="button" onClick={() => deleteProfile(id)} className="rounded-full px-2 py-1 text-xs text-terracotta transition hover:bg-terracotta/10">Remove</button>
+                          {linkedProfileId !== id && selectedMac && <button type="button" onClick={() => linkProfileToDevice(id)} className="rounded-xl bg-primary/12 px-2.5 py-1 text-xs font-medium text-primary transition hover:bg-primary/22">Use for device</button>}
+                          <button type="button" onClick={() => openEditPlant(id)} className="rounded-full p-1.5 text-forest/40 transition hover:bg-sage-100 hover:text-forest" aria-label="Edit profile"><PencilIcon className="h-3.5 w-3.5" /></button>
+                          <button type="button" onClick={() => deleteProfile(id)} className="rounded-full px-2 py-1 text-xs text-terracotta/70 transition hover:bg-red-50 hover:text-terracotta">Remove</button>
                         </div>
                       </li>
                     ))}
@@ -545,8 +561,8 @@ export function DashboardPage() {
 
         {/* Edit plant modal */}
         {editModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest/20 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="edit-plant-title" onClick={closeEditPlant}>
-            <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.2, ease: 'easeOut' }} className="glass-card-solid w-full max-w-sm rounded-3xl p-6 shadow-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest/25 p-4 backdrop-blur-md" role="dialog" aria-modal="true" aria-labelledby="edit-plant-title" onClick={closeEditPlant}>
+            <motion.div variants={fadeScale} initial="hidden" animate="visible" exit="exit" className="glass-card-solid w-full max-w-sm rounded-3xl p-6 shadow-modal" onClick={(e) => e.stopPropagation()}>
               <h2 id="edit-plant-title" className="mb-4 text-lg font-semibold text-forest">{editingProfileId ? 'Edit plant' : 'Add plant'}</h2>
               <div className="mb-4 space-y-3">
                 <label className="block text-sm font-medium text-forest-600">
@@ -574,19 +590,19 @@ export function DashboardPage() {
         )}
 
         {/* Invite section */}
-        <section className="section-card mt-10">
+        <motion.section variants={fadeSlideUp} initial="hidden" animate="visible" transition={spring.gentle} className="section-card mt-8 mb-8">
           <h2 className="stat-label mb-1">Invite user</h2>
-          <p className="mb-3 text-sm text-forest-400">Share the app link. New users sign up with email and password, then can claim their own devices.</p>
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <input type="text" readOnly value={appUrl} className="min-w-0 flex-1 input-field" />
-            <button type="button" onClick={handleCopyUrl} className="btn-ghost">{copyOk ? 'Copied!' : 'Copy link'}</button>
+          <p className="mb-4 text-sm text-forest-400">Share the app link. New users sign up with email and password, then can claim their own devices.</p>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <input type="text" readOnly value={appUrl} className="min-w-0 flex-1 input-field font-mono !text-xs" />
+            <button type="button" onClick={handleCopyUrl} className="btn-ghost">{copyOk ? '✓ Copied' : 'Copy link'}</button>
           </div>
           <form onSubmit={handleInvite} className="mb-3 flex flex-wrap items-center gap-2">
             <input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="Email to add to invite list" className="input-field" />
-            <button type="submit" className="btn-primary">Add to invite list</button>
+            <button type="submit" className="btn-primary">Invite</button>
           </form>
-          {invitedList.length > 0 && <p className="text-xs text-forest-400">Invited: {invitedList.join(', ')} (they still need to sign up at the link above).</p>}
-        </section>
+          {invitedList.length > 0 && <p className="text-xs text-forest/40">Invited: {invitedList.join(', ')}</p>}
+        </motion.section>
       </div>
     </div>
   )
