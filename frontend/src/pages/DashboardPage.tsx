@@ -38,6 +38,65 @@ const EXAMPLE_PLANTS = [
 
 const STORAGE_KEY = 'smart-plant-selected-device'
 
+// ---------------------------------------------------------------------------
+// Centralized device status state machine
+// ---------------------------------------------------------------------------
+type DeviceStatus = 'live' | 'delayed' | 'offline' | 'syncing' | 'wifi_connected' | 'no_data'
+
+function getDeviceStatus(
+  readings: Readings | null,
+  nowSec: number,
+  resetRequestedAt: number,
+): DeviceStatus {
+  // Reset flow active but readings wiped
+  if (!readings && resetRequestedAt > 0) return 'syncing'
+  // Never received any data
+  if (!readings) return 'no_data'
+
+  const ts = readings.timestamp ?? 0
+  const tsValid = ts > 1577836800
+
+  // Reset flow: check post-reset conditions
+  if (resetRequestedAt > 0) {
+    const isPostReset = tsValid && ts > resetRequestedAt
+    if (!isPostReset) return 'syncing'
+    if (!readings.wifiSSID) return 'syncing'
+    const hasSensors = readings.temperature != null && !Number.isNaN(readings.temperature)
+    if (!hasSensors) return 'wifi_connected'
+    // All post-reset data arrived → fall through to normal states
+  }
+
+  if (!tsValid) return 'no_data'
+
+  const secondsAgo = nowSec - ts
+  if (secondsAgo <= 15) return 'live'
+  if (secondsAgo <= 35) return 'delayed'
+  return 'offline'
+}
+
+const STATUS_META: Record<DeviceStatus, {
+  color: string; bg: string; border: string; label: string; pulse: boolean
+  dotColor: string
+}> = {
+  live:           { color: 'text-green-600',  bg: 'bg-green-50',  border: 'border-green-200/60',  label: 'Live',           pulse: true,  dotColor: 'bg-green-500' },
+  delayed:        { color: 'text-amber-600',  bg: 'bg-amber-50',  border: 'border-amber-200/60',  label: 'Delayed',        pulse: false, dotColor: 'bg-amber-500' },
+  offline:        { color: 'text-red-500',    bg: 'bg-red-50',    border: 'border-red-200/60',    label: 'Offline',        pulse: false, dotColor: 'bg-red-500' },
+  syncing:        { color: 'text-blue-500',   bg: 'bg-blue-50',   border: 'border-blue-200/60',   label: 'Syncing',        pulse: true,  dotColor: 'bg-blue-500' },
+  wifi_connected: { color: 'text-amber-600',  bg: 'bg-amber-50',  border: 'border-amber-200/60',  label: 'WiFi Connected', pulse: true,  dotColor: 'bg-amber-500' },
+  no_data:        { color: 'text-gray-400',   bg: 'bg-gray-50',   border: 'border-gray-200/60',   label: 'No Data',        pulse: false, dotColor: 'bg-gray-400' },
+}
+
+function formatSecondsAgo(sec: number, tsValid: boolean): string {
+  if (!tsValid) return 'never'
+  if (sec < 60) return `${sec}s ago`
+  if (sec < 3600) return `${Math.floor(sec / 60)} min ago`
+  if (sec < 86400) return `${Math.floor(sec / 3600)} h ago`
+  return `${Math.floor(sec / 86400)} d ago`
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 export function DashboardPage() {
   const { user, signOut } = useAuth()
   const [myDevices, setMyDevices] = useState<string[]>([])
@@ -61,9 +120,8 @@ export function DashboardPage() {
   const [newProfileName, setNewProfileName] = useState('')
   const [newProfileType, setNewProfileType] = useState('')
   const [newProfilePresetId, setNewProfilePresetId] = useState<string | null>(null)
-  const [resetFlowActive, setResetFlowActive] = useState(false)
   const [resetRequestedAt, setResetRequestedAt] = useState(0)
-  const [syncPhase, setSyncPhase] = useState<'idle' | 'wifi-connected' | 'synced'>('idle')
+  const [showSyncedBanner, setShowSyncedBanner] = useState(false)
   const [calibration, setCalibration] = useState<{ boneDry: number | null; submerged: number | null }>({ boneDry: null, submerged: null })
   const [lastAlert, setLastAlert] = useState<{ timestamp: number; type: string; message: string } | null>(null)
   const [pumpActive, setPumpActive] = useState(false)
@@ -72,9 +130,11 @@ export function DashboardPage() {
     typeof window !== 'undefined' && localStorage.getItem('notif_enabled') === 'true'
   )
   const lastNotifiedAtRef = useRef(0)
+  const prevStatusRef = useRef<DeviceStatus>('no_data')
   const appUrl = typeof window !== 'undefined' ? window.location.origin : ''
 
-  // Load user's claimed devices
+  // ── Firebase listeners (unchanged) ──
+
   useEffect(() => {
     if (!user) return
     const userDevicesRef = ref(firebaseDb, `users/${user.uid}/devices`)
@@ -91,7 +151,6 @@ export function DashboardPage() {
     return () => unsub()
   }, [user, selectedMac])
 
-  // Load plant profiles (users/<uid>/plantProfiles)
   useEffect(() => {
     if (!user) return
     const profilesRef = ref(firebaseDb, `users/${user.uid}/plantProfiles`)
@@ -102,12 +161,8 @@ export function DashboardPage() {
     return () => unsub()
   }, [user])
 
-  // Load linked plant for selected device (users/<uid>/devicePlant/<mac>)
   useEffect(() => {
-    if (!user || !selectedMac) {
-      setLinkedProfileId(null)
-      return
-    }
+    if (!user || !selectedMac) { setLinkedProfileId(null); return }
     const devicePlantRef = ref(firebaseDb, `users/${user.uid}/devicePlant/${selectedMac}`)
     const unsub = onValue(devicePlantRef, (snap) => {
       const id = snap.val()
@@ -116,12 +171,8 @@ export function DashboardPage() {
     return () => unsub()
   }, [user, selectedMac])
 
-  // Live readings for selected device
   useEffect(() => {
-    if (!selectedMac) {
-      setReadings(null)
-      return
-    }
+    if (!selectedMac) { setReadings(null); return }
     const readingsRef = ref(firebaseDb, `devices/${selectedMac}/readings`)
     const unsub = onValue(readingsRef, (snap) => {
       setReadings(snap.val() ?? null)
@@ -129,7 +180,6 @@ export function DashboardPage() {
     return () => unsub()
   }, [selectedMac])
 
-  // Load targetSoil from control for selected device
   useEffect(() => {
     if (!selectedMac) return
     const controlRef = ref(firebaseDb, `devices/${selectedMac}/control/targetSoil`)
@@ -143,12 +193,8 @@ export function DashboardPage() {
     return () => unsub()
   }, [selectedMac])
 
-  // Load calibration (boneDry, submerged) for selected device
   useEffect(() => {
-    if (!selectedMac) {
-      setCalibration({ boneDry: null, submerged: null })
-      return
-    }
+    if (!selectedMac) { setCalibration({ boneDry: null, submerged: null }); return }
     const calRef = ref(firebaseDb, `devices/${selectedMac}/calibration`)
     const unsub = onValue(calRef, (snap) => {
       const val = snap.val()
@@ -165,12 +211,8 @@ export function DashboardPage() {
     return () => unsub()
   }, [selectedMac])
 
-  // Load last alert for selected device
   useEffect(() => {
-    if (!selectedMac) {
-      setLastAlert(null)
-      return
-    }
+    if (!selectedMac) { setLastAlert(null); return }
     const alertRef = ref(firebaseDb, `devices/${selectedMac}/alerts/lastAlert`)
     const unsub = onValue(alertRef, (snap) => {
       const val = snap.val()
@@ -188,7 +230,6 @@ export function DashboardPage() {
     return () => unsub()
   }, [selectedMac])
 
-  // Live pump state
   useEffect(() => {
     if (!selectedMac) { setPumpActive(false); return }
     const pumpRef = ref(firebaseDb, `devices/${selectedMac}/readings/pumpRunning`)
@@ -196,16 +237,12 @@ export function DashboardPage() {
     return () => unsub()
   }, [selectedMac])
 
-  // Invited users list (users/<uid>/invites)
   useEffect(() => {
     if (!user) return
     const invitesRef = ref(firebaseDb, `users/${user.uid}/invites`)
     const unsub = onValue(invitesRef, (snap) => {
       const val = snap.val()
-      if (!val || typeof val !== 'object') {
-        setInvitedList([])
-        return
-      }
+      if (!val || typeof val !== 'object') { setInvitedList([]); return }
       const emails = (Object.values(val) as { email?: string }[])
         .map((v) => v.email)
         .filter((e): e is string => typeof e === 'string')
@@ -214,11 +251,12 @@ export function DashboardPage() {
     return () => unsub()
   }, [user])
 
+  // ── Handlers ──
+
   function handleSaveTarget() {
     const n = parseInt(targetSoilInput, 10)
     if (isNaN(n) || n < 0) return
-    const path = `devices/${selectedMac}/control/targetSoil`
-    set(ref(firebaseDb, path), n).catch(console.error)
+    set(ref(firebaseDb, `devices/${selectedMac}/control/targetSoil`), n).catch(console.error)
     setTargetSoil(n)
   }
 
@@ -227,9 +265,7 @@ export function DashboardPage() {
       await navigator.clipboard.writeText(appUrl)
       setCopyOk(true)
       setTimeout(() => setCopyOk(false), 2000)
-    } catch {
-      setCopyOk(false)
-    }
+    } catch { setCopyOk(false) }
   }
 
   async function handleInvite(e: React.FormEvent) {
@@ -267,9 +303,7 @@ export function DashboardPage() {
     const now = Date.now()
     if (editingProfileId) {
       await set(ref(firebaseDb, `users/${user.uid}/plantProfiles/${editingProfileId}`), {
-        name,
-        type: type || '—',
-        createdAt: profiles[editingProfileId]?.createdAt ?? now,
+        name, type: type || '—', createdAt: profiles[editingProfileId]?.createdAt ?? now,
       }).catch(console.error)
       if (selectedMac && editPresetId) {
         const preset = EXAMPLE_PLANTS.find((p) => p.id === editPresetId)
@@ -313,15 +347,13 @@ export function DashboardPage() {
   }
 
   async function handleResetDeviceWiFi() {
-    if (!selectedMac || resetFlowActive) return
+    if (!selectedMac || resetRequestedAt > 0) return
     const now = Math.floor(Date.now() / 1000)
     await Promise.all([
       set(ref(firebaseDb, `devices/${selectedMac}/control/resetProvisioning`), true),
       set(ref(firebaseDb, `devices/${selectedMac}/readings`), null),
     ]).catch(console.error)
     setResetRequestedAt(now)
-    setResetFlowActive(true)
-    setSyncPhase('idle')
   }
 
   async function handleMarkDry() {
@@ -361,16 +393,12 @@ export function DashboardPage() {
     }
   }
 
-  // Fire browser notification on new alert
   useEffect(() => {
     if (!notificationsEnabled || !lastAlert) return
     if (!('Notification' in window) || Notification.permission !== 'granted') return
     if (lastAlert.timestamp <= lastNotifiedAtRef.current) return
     lastNotifiedAtRef.current = lastAlert.timestamp
-    new Notification('Smart Plant Pro', {
-      body: lastAlert.message,
-      icon: '/plant-icon.svg',
-    })
+    new Notification('Smart Plant Pro', { body: lastAlert.message, icon: '/plant-icon.svg' })
   }, [lastAlert, notificationsEnabled])
 
   async function addNewProfile(e: React.FormEvent) {
@@ -395,117 +423,90 @@ export function DashboardPage() {
     setNewProfilePresetId(null)
   }
 
-  // Phased sync detection after reset:
-  //  1. resetFlowActive=true → full guide shown
-  //  2. wifiSSID appears (post-reset) → dismiss guide, show "wifi-connected / syncing"
-  //  3. valid sensor data arrives (post-reset) → show "synced", then idle
-  useEffect(() => {
-    if (!resetRequestedAt) return
-    const ts = readings?.timestamp ?? 0
-    const isPostReset = ts > resetRequestedAt
-    const hasWifi = !!readings?.wifiSSID
-    const hasSensors = readings?.temperature != null || (readings?.soilRaw != null && readings.soilRaw > 0)
-
-    if (isPostReset && hasWifi && hasSensors && syncPhase !== 'synced') {
-      // Full data arrived — sync complete
-      setResetFlowActive(false)
-      setSyncPhase('synced')
-      setTimeout(() => {
-        setSyncPhase('idle')
-        setResetRequestedAt(0)
-      }, 3000)
-    } else if (isPostReset && hasWifi && syncPhase === 'idle') {
-      // WiFi connected but no sensor data yet
-      setResetFlowActive(false)
-      setSyncPhase('wifi-connected')
-    }
-  }, [readings?.timestamp, readings?.wifiSSID, readings?.temperature, readings?.soilRaw, resetRequestedAt, syncPhase])
+  // ── Derived values + sensor animations ──
 
   const currentPlant = linkedProfileId ? profiles[linkedProfileId] : null
-
   const soil = readings?.soilRaw != null ? soilStatus(readings.soilRaw) : null
   const soilLabel = soil != null ? soilStatusLabel(soil) : '—'
-  const gaugePct =
-    readings?.soilRaw != null
-      ? soilRawToGaugeCalibrated(readings.soilRaw, calibration.boneDry, calibration.submerged) * 100
-      : 0
+  const gaugePct = readings?.soilRaw != null
+    ? soilRawToGaugeCalibrated(readings.soilRaw, calibration.boneDry, calibration.submerged) * 100
+    : 0
   const temp = readings?.temperature
 
-  // Count-up animation for temperature
   useEffect(() => {
     const to = temp != null && !Number.isNaN(temp) ? temp : 0
     const controls = animate(displayTemp, to, { duration: 0.6, onUpdate: (v) => setDisplayTemp(v) })
     return () => controls.stop()
   }, [temp])
 
-  // Count-up for soil gauge percentage
   useEffect(() => {
     const controls = animate(displayGaugePct, gaugePct, { duration: 0.7, onUpdate: (v) => setDisplayGaugePct(v) })
     return () => controls.stop()
   }, [gaugePct])
-  // Tick every 5s so offline/stale detection stays current even without new data
+
+  // Tick every 2s for live "last seen" counter
   const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000))
   useEffect(() => {
     const id = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 2000)
     return () => clearInterval(id)
   }, [])
 
-  const showProTip = temp != null && !Number.isNaN(temp) && temp > 28
+  // ── CENTRALIZED STATUS ──
+  const deviceStatus = getDeviceStatus(readings, nowSec, resetRequestedAt)
+  const meta = STATUS_META[deviceStatus]
+
+  // Auto-clear reset flow + show "synced" banner on recovery
+  useEffect(() => {
+    if (resetRequestedAt > 0 && deviceStatus === 'live') {
+      setShowSyncedBanner(true)
+      const timer = setTimeout(() => {
+        setResetRequestedAt(0)
+        setShowSyncedBanner(false)
+      }, 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [deviceStatus, resetRequestedAt])
+
+  useEffect(() => { prevStatusRef.current = deviceStatus }, [deviceStatus])
+
+  // Convenience flags derived from the single status enum
+  const isResetGuide = resetRequestedAt > 0 && deviceStatus === 'syncing'
+  const dataUntrusted = deviceStatus === 'offline' || deviceStatus === 'syncing'
+    || deviceStatus === 'wifi_connected' || deviceStatus === 'no_data'
+  const isDelayed = deviceStatus === 'delayed'
   const healthOk = (readings?.health ?? '').toLowerCase() === 'ok'
+
   const lastSeenSec = readings?.timestamp ?? 0
-  const tsLooksValid = lastSeenSec > 1577836800
-  const secondsAgo = tsLooksValid ? nowSec - lastSeenSec : Infinity
-  const isStale = secondsAgo > 15
-  const isOffline = secondsAgo > 35
-  const lastUpdated = readings?.timestamp != null && tsLooksValid
+  const tsValid = lastSeenSec > 1577836800
+  const secondsAgo = tsValid ? nowSec - lastSeenSec : Infinity
+  const lastSeenLabel = formatSecondsAgo(secondsAgo, tsValid)
+  const lastUpdated = readings?.timestamp != null && tsValid
     ? new Date(readings.timestamp * 1000).toLocaleTimeString()
     : null
-  const lastSeenLabel =
-    !tsLooksValid
-      ? 'never'
-      : secondsAgo < 60
-        ? `${secondsAgo}s ago`
-        : secondsAgo < 3600
-          ? `${Math.floor(secondsAgo / 60)} min ago`
-          : secondsAgo < 86400
-            ? `${Math.floor(secondsAgo / 3600)} h ago`
-            : `${Math.floor(secondsAgo / 86400)} d ago`
+  const showProTip = temp != null && !Number.isNaN(temp) && temp > 28
 
-  type DeviceStatus = 'live' | 'stale' | 'offline' | 'syncing' | 'resetting' | 'never'
-  const deviceStatus: DeviceStatus =
-    resetFlowActive ? 'resetting'
-    : syncPhase === 'wifi-connected' ? 'syncing'
-    : !tsLooksValid ? 'never'
-    : isOffline ? 'offline'
-    : isStale ? 'stale'
-    : 'live'
-
-  const isSyncing = syncPhase === 'wifi-connected'
-  const dataUntrusted = deviceStatus === 'offline' || deviceStatus === 'syncing' || deviceStatus === 'never'
-
-  const statusConfig: Record<DeviceStatus, { color: string; bgColor: string; borderColor: string; label: string; description: string }> = {
-    live:       { color: 'text-primary',    bgColor: 'bg-primary/10',     borderColor: 'border-primary/20',    label: 'Live',       description: `Receiving data — updated ${lastSeenLabel}` },
-    stale:      { color: 'text-amber-600',  bgColor: 'bg-amber-50',       borderColor: 'border-amber-200/60',  label: 'Delayed',    description: `Last data ${lastSeenLabel} — device may be slow to respond` },
-    offline:    { color: 'text-red-500',    bgColor: 'bg-red-50',         borderColor: 'border-red-200/60',    label: 'Offline',    description: `Last seen ${lastSeenLabel} — device is not sending data` },
-    syncing:    { color: 'text-blue-500',   bgColor: 'bg-blue-50',        borderColor: 'border-blue-200/60',   label: 'Syncing',    description: 'Connected to WiFi — waiting for sensor data…' },
-    resetting:  { color: 'text-amber-600',  bgColor: 'bg-amber-50',       borderColor: 'border-amber-200/60',  label: 'Resetting',  description: 'Device is restarting into setup mode…' },
-    never:      { color: 'text-forest/40',  bgColor: 'bg-forest/5',       borderColor: 'border-forest/10',     label: 'No data',    description: 'This device has never sent readings' },
+  const statusDescription: Record<DeviceStatus, string> = {
+    live:           `Receiving data — updated ${lastSeenLabel}`,
+    delayed:        `Last data ${lastSeenLabel} — device may be slow to respond`,
+    offline:        `Last seen ${lastSeenLabel} — device is not sending data`,
+    syncing:        resetRequestedAt > 0 ? 'Device is restarting into setup mode…' : 'Waiting for sensor data…',
+    wifi_connected: 'Connected to WiFi — waiting for sensor data…',
+    no_data:        'This device has never sent readings',
   }
-  const status = statusConfig[deviceStatus]
 
+  // ── RENDER ──
   return (
     <div className="min-h-screen bg-surface p-4 md:p-6 lg:p-8">
       <div className="mx-auto max-w-4xl">
+        {/* Header */}
         <header className="mb-8 flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-white/60 px-4 py-3 shadow-card backdrop-blur-sm sm:px-6 sm:py-4">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-600 shadow-sm">
               <PlantIcon className="h-4.5 w-4.5 text-white" />
             </div>
-            <div>
-              <h1 className="font-display text-lg font-bold tracking-tight text-forest sm:text-xl">
-                Smart Plant Pro
-              </h1>
-            </div>
+            <h1 className="font-display text-lg font-bold tracking-tight text-forest sm:text-xl">
+              Smart Plant Pro
+            </h1>
           </div>
           <div className="flex items-center gap-2">
             {user && (
@@ -536,76 +537,54 @@ export function DashboardPage() {
             </div>
             <p className="mb-2 font-display text-lg font-semibold text-forest">No devices yet</p>
             <p className="mb-6 text-sm text-forest/45">Add your first plant monitor to get started.</p>
-            <Link to="/claim" className="btn-primary">
-              Add a device
-            </Link>
+            <Link to="/claim" className="btn-primary">Add a device</Link>
           </div>
         ) : (
           <>
-            {/* Device selector + status card */}
+            {/* ── Device selector + status card ── */}
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              className={`mb-6 rounded-3xl border ${status.borderColor} ${status.bgColor} p-4 transition-colors duration-500 sm:p-5`}
+              className={`mb-6 rounded-3xl border ${meta.border} ${meta.bg} p-4 transition-colors duration-500 sm:p-5`}
             >
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <select
                     value={selectedMac}
-                    onChange={(e) => {
-                      const v = e.target.value
-                      setSelectedMac(v)
-                      localStorage.setItem(STORAGE_KEY, v)
-                    }}
+                    onChange={(e) => { setSelectedMac(e.target.value); localStorage.setItem(STORAGE_KEY, e.target.value) }}
                     className="rounded-xl border border-forest/10 bg-white/80 px-3 py-2 font-mono text-xs text-forest focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 sm:text-sm"
                   >
-                    {myDevices.map((mac) => (
-                      <option key={mac} value={mac}>
-                        {mac}
-                      </option>
-                    ))}
+                    {myDevices.map((mac) => <option key={mac} value={mac}>{mac}</option>)}
                   </select>
                   <button
                     type="button"
                     onClick={handleResetDeviceWiFi}
-                    disabled={resetFlowActive}
+                    disabled={resetRequestedAt > 0}
                     className={`rounded-xl border px-3 py-2 text-xs font-medium transition ${
-                      resetFlowActive
+                      resetRequestedAt > 0
                         ? 'cursor-not-allowed border-forest/10 bg-white/40 text-forest/30'
                         : 'border-red-200 bg-white/60 text-red-500 hover:bg-red-50'
                     }`}
                     title="Device will clear its WiFi config and restart in AP mode"
                   >
-                    {resetFlowActive ? 'Reset sent…' : 'Reset WiFi'}
+                    {resetRequestedAt > 0 ? 'Reset sent…' : 'Reset WiFi'}
                   </button>
                 </div>
 
                 {/* Status badge */}
                 <div className="flex items-center gap-2">
                   <span className="relative flex h-2.5 w-2.5">
-                    {(deviceStatus === 'live' || deviceStatus === 'syncing') && (
-                      <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${
-                        deviceStatus === 'live' ? 'bg-green-400' : 'bg-blue-400'
-                      }`} />
+                    {meta.pulse && (
+                      <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${meta.dotColor.replace('bg-', 'bg-')}`} />
                     )}
-                    <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${
-                      deviceStatus === 'live' ? 'bg-green-500'
-                      : deviceStatus === 'stale' ? 'bg-amber-500'
-                      : deviceStatus === 'offline' ? 'bg-red-500'
-                      : deviceStatus === 'syncing' ? 'bg-blue-500'
-                      : deviceStatus === 'resetting' ? 'bg-amber-500'
-                      : 'bg-gray-400'
-                    }`} />
+                    <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${meta.dotColor}`} />
                   </span>
-                  <span className={`text-sm font-semibold ${status.color}`}>
-                    {status.label}
-                  </span>
+                  <span className={`text-sm font-semibold ${meta.color}`}>{meta.label}</span>
                 </div>
               </div>
 
-              {/* Status description line */}
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                <p className={`text-xs ${status.color} opacity-80`}>{status.description}</p>
+                <p className={`text-xs ${meta.color} opacity-80`}>{statusDescription[deviceStatus]}</p>
                 {readings?.wifiSSID && (
                   <p className="text-xs text-forest/40">
                     {deviceStatus === 'live' ? 'WiFi: ' : 'Last WiFi: '}
@@ -621,8 +600,8 @@ export function DashboardPage() {
               </div>
             </motion.div>
 
-            {/* Reset WiFi: full-page provisioning guide replaces dashboard content */}
-            {resetFlowActive && (
+            {/* ── Reset WiFi guide (shown only during active syncing after reset) ── */}
+            {isResetGuide && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -637,49 +616,26 @@ export function DashboardPage() {
                     <p className="text-sm text-forest/60">Your device is restarting into setup mode</p>
                   </div>
                 </div>
-
                 <p className="mb-4 text-sm text-forest/70">
-                  No data will appear here until the device reconnects to WiFi. Follow these steps to reconfigure it:
+                  No data will appear here until the device reconnects to WiFi. Follow these steps:
                 </p>
-
                 <ol className="mb-6 space-y-4">
-                  <li className="flex gap-3">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">1</span>
-                    <div>
-                      <p className="text-sm font-medium text-forest">Wait ~10 seconds</p>
-                      <p className="text-xs text-forest/60">The device is clearing its WiFi config and restarting into AP mode.</p>
-                    </div>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">2</span>
-                    <div>
-                      <p className="text-sm font-medium text-forest">Connect to <span className="font-mono text-primary">SmartPlantPro</span> WiFi</p>
-                      <p className="text-xs text-forest/60">Open WiFi settings on your phone or laptop and connect to the SmartPlantPro network.</p>
-                    </div>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">3</span>
-                    <div>
-                      <p className="text-sm font-medium text-forest">Open the setup portal</p>
-                      <p className="text-xs text-forest/60">A captive portal should open automatically. If not, go to <strong className="font-mono">192.168.4.1</strong> in a browser.</p>
-                    </div>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">4</span>
-                    <div>
-                      <p className="text-sm font-medium text-forest">Choose WiFi and save</p>
-                      <p className="text-xs text-forest/60">Select your WiFi network, enter the password, and optionally fill Firebase credentials. Hit Save.</p>
-                    </div>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">5</span>
-                    <div>
-                      <p className="text-sm font-medium text-forest">Reconnect to your own WiFi</p>
-                      <p className="text-xs text-forest/60">Switch back to your home WiFi. The dashboard will update automatically once the device connects.</p>
-                    </div>
-                  </li>
+                  {[
+                    { title: 'Wait ~10 seconds', desc: 'The device is clearing its WiFi config and restarting into AP mode.' },
+                    { title: <>Connect to <span className="font-mono text-primary">SmartPlantPro</span> WiFi</>, desc: 'Open WiFi settings on your phone or laptop and connect to the SmartPlantPro network.' },
+                    { title: 'Open the setup portal', desc: <>A captive portal should open automatically. If not, go to <strong className="font-mono">192.168.4.1</strong> in a browser.</> },
+                    { title: 'Choose WiFi and save', desc: 'Select your WiFi network, enter the password. Hit Save.' },
+                    { title: 'Reconnect to your own WiFi', desc: 'Switch back to your home WiFi. The dashboard will update automatically once the device connects.' },
+                  ].map((step, i) => (
+                    <li key={i} className="flex gap-3">
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">{i + 1}</span>
+                      <div>
+                        <p className="text-sm font-medium text-forest">{step.title}</p>
+                        <p className="text-xs text-forest/60">{step.desc}</p>
+                      </div>
+                    </li>
+                  ))}
                 </ol>
-
                 <div className="flex items-center gap-3 rounded-2xl bg-surface px-4 py-3">
                   <span className="relative flex h-3 w-3">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
@@ -687,10 +643,9 @@ export function DashboardPage() {
                   </span>
                   <p className="text-sm text-forest/70">Waiting for device to reconnect…</p>
                 </div>
-
                 <button
                   type="button"
-                  onClick={() => setResetFlowActive(false)}
+                  onClick={() => setResetRequestedAt(0)}
                   className="mt-4 rounded-2xl border border-forest/10 bg-white px-4 py-2 text-sm font-medium text-forest/60 transition hover:bg-mint/30 hover:text-forest"
                 >
                   Dismiss and show dashboard
@@ -698,9 +653,11 @@ export function DashboardPage() {
               </motion.div>
             )}
 
-            {!resetFlowActive && (<>
+            {/* ── Main dashboard content (hidden during reset guide) ── */}
+            {!isResetGuide && (<>
+
             {/* Sync complete banner */}
-            {syncPhase === 'synced' && (
+            {showSyncedBanner && (
               <motion.div
                 initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -711,21 +668,37 @@ export function DashboardPage() {
               </motion.div>
             )}
 
-            {/* Stale warning banner */}
-            {deviceStatus === 'stale' && (
+            {/* WiFi connected, waiting for sensors */}
+            {deviceStatus === 'wifi_connected' && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4 flex items-center gap-3 rounded-2xl border border-amber-200/60 bg-amber-50/80 px-5 py-4"
+              >
+                <span className="relative flex h-3 w-3 shrink-0">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400/50" />
+                  <span className="relative inline-flex h-3 w-3 rounded-full bg-amber-500" />
+                </span>
+                <div>
+                  <p className="text-sm font-medium text-forest">Connected to WiFi — syncing sensor data…</p>
+                  <p className="text-xs text-forest/60">The device is online. Waiting for fresh sensor readings…</p>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Delayed warning */}
+            {deviceStatus === 'delayed' && (
               <motion.div
                 initial={{ opacity: 0, y: -6 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="mb-4 flex items-center gap-3 rounded-2xl border border-amber-200/60 bg-amber-50/80 px-4 py-3"
               >
                 <svg className="h-4 w-4 shrink-0 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
-                <p className="text-xs text-amber-700">
-                  Data may be slightly outdated — last update was {lastSeenLabel}
-                </p>
+                <p className="text-xs text-amber-700">Data may be slightly outdated — last update was {lastSeenLabel}</p>
               </motion.div>
             )}
 
-            {/* Offline banner with help */}
+            {/* Offline banner */}
             {deviceStatus === 'offline' && (
               <motion.div
                 initial={{ opacity: 0, y: -6 }}
@@ -738,9 +711,7 @@ export function DashboardPage() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-red-600">Device appears offline</p>
-                    <p className="mt-0.5 text-xs text-red-500/70">
-                      Last seen {lastSeenLabel}. The values below are frozen from the last known reading.
-                    </p>
+                    <p className="mt-0.5 text-xs text-red-500/70">Last seen {lastSeenLabel}. The values below are frozen from the last known reading.</p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       <span className="rounded-md bg-red-100/80 px-2 py-0.5 text-[10px] font-medium text-red-600">Check power supply</span>
                       <span className="rounded-md bg-red-100/80 px-2 py-0.5 text-[10px] font-medium text-red-600">Check WiFi range</span>
@@ -751,7 +722,7 @@ export function DashboardPage() {
               </motion.div>
             )}
 
-            {/* Hero: plant name/type + overall health */}
+            {/* ── Hero: plant name + health ── */}
             <motion.div
               key={selectedMac}
               initial={{ opacity: 0, y: 12 }}
@@ -762,212 +733,138 @@ export function DashboardPage() {
               <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl transition-colors duration-500 sm:h-14 sm:w-14 ${
                 dataUntrusted ? 'bg-forest/5' : 'bg-primary/10'
               }`}>
-                <PlantIcon className={`h-6 w-6 transition-colors duration-500 sm:h-7 sm:w-7 ${
-                  dataUntrusted ? 'text-forest/30' : 'text-primary'
-                }`} />
+                <PlantIcon className={`h-6 w-6 transition-colors duration-500 sm:h-7 sm:w-7 ${dataUntrusted ? 'text-forest/30' : 'text-primary'}`} />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <p className={`text-sm font-medium sm:text-base transition-colors duration-300 ${
-                    dataUntrusted ? 'text-forest/50' : 'text-forest'
-                  }`}>
+                  <p className={`text-sm font-medium sm:text-base transition-colors duration-300 ${dataUntrusted ? 'text-forest/50' : 'text-forest'}`}>
                     {currentPlant?.name ?? 'Your plant'}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => openEditPlant(linkedProfileId)}
-                    className="rounded-full p-1 text-forest/50 transition hover:bg-mint/50 hover:text-forest"
-                    aria-label="Edit plant name and type"
-                  >
+                  <button type="button" onClick={() => openEditPlant(linkedProfileId)} className="rounded-full p-1 text-forest/50 transition hover:bg-mint/50 hover:text-forest" aria-label="Edit plant name and type">
                     <PencilIcon className="h-4 w-4" />
                   </button>
                 </div>
                 <p className="text-xs text-forest/50">
-                  {currentPlant?.type ? `${currentPlant.type}` : 'No plant type set'}
+                  {currentPlant?.type || 'No plant type set'}
                   {deviceStatus === 'live' && <span className="ml-1.5 text-green-500">· Live</span>}
-                  {deviceStatus === 'stale' && <span className="ml-1.5 text-amber-500">· Delayed</span>}
+                  {deviceStatus === 'delayed' && <span className="ml-1.5 text-amber-500">· Delayed</span>}
                   {deviceStatus === 'offline' && <span className="ml-1.5 text-red-400">· Offline</span>}
+                  {deviceStatus === 'wifi_connected' && <span className="ml-1.5 text-amber-500">· Syncing</span>}
                 </p>
               </div>
               <div className="shrink-0 text-right">
                 <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-forest/50 sm:text-xs">Health</p>
                 {dataUntrusted ? (
                   <span className="inline-block rounded-full border-2 border-forest/10 bg-forest/5 px-4 py-2 text-sm font-semibold text-forest/30 sm:px-5 sm:py-2.5 sm:text-base">
-                    {isSyncing ? '…' : '—'}
+                    {deviceStatus === 'wifi_connected' || deviceStatus === 'syncing' ? '…' : '—'}
                   </span>
-                ) : isStale ? (
+                ) : isDelayed ? (
                   <span className="inline-block rounded-full border-2 border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-600 sm:px-5 sm:py-2.5 sm:text-base">
                     {readings?.health ?? '?'}
                   </span>
                 ) : (
-                  <span
-                    className={`inline-block rounded-full border-2 px-4 py-2 text-sm font-semibold sm:px-5 sm:py-2.5 sm:text-base ${
-                      healthOk
-                        ? 'border-primary/30 bg-primary/10 text-primary'
-                        : 'border-terracotta/30 bg-terracotta/10 text-terracotta'
-                    }`}
-                  >
+                  <span className={`inline-block rounded-full border-2 px-4 py-2 text-sm font-semibold sm:px-5 sm:py-2.5 sm:text-base ${
+                    healthOk ? 'border-primary/30 bg-primary/10 text-primary' : 'border-terracotta/30 bg-terracotta/10 text-terracotta'
+                  }`}>
                     {readings?.health ?? '—'}
                   </span>
                 )}
               </div>
             </motion.div>
 
-            {/* Alert + notification toggle row */}
+            {/* Alert + notification toggle */}
             <div className="mb-4 space-y-3">
               {lastAlert && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex items-start gap-3 rounded-2xl border border-terracotta/20 bg-terracotta-light/60 px-4 py-3"
-                >
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex items-start gap-3 rounded-2xl border border-terracotta/20 bg-terracotta-light/60 px-4 py-3">
                   <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-terracotta/15">
                     <svg className="h-3.5 w-3.5 text-terracotta" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 15.75h.008" /></svg>
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-forest">{lastAlert.message}</p>
-                    {lastAlert.timestamp > 0 && (
-                      <p className="mt-0.5 text-xs text-forest/40">
-                        {new Date(lastAlert.timestamp * 1000).toLocaleString()}
-                      </p>
-                    )}
+                    {lastAlert.timestamp > 0 && <p className="mt-0.5 text-xs text-forest/40">{new Date(lastAlert.timestamp * 1000).toLocaleString()}</p>}
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleAckAlert}
-                    className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium text-terracotta transition hover:bg-terracotta/10"
-                  >
-                    Dismiss
-                  </button>
+                  <button type="button" onClick={handleAckAlert} className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium text-terracotta transition hover:bg-terracotta/10">Dismiss</button>
                 </motion.div>
               )}
-
-              {/* Browser notification toggle */}
               <div className="flex items-center gap-3 rounded-2xl border border-forest/5 bg-white/60 px-4 py-2.5">
                 <svg className="h-4 w-4 shrink-0 text-forest/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>
                 <span className="flex-1 text-xs text-forest/60">
-                  {'Notification' in window && Notification.permission === 'denied'
-                    ? 'Notifications blocked by browser'
-                    : 'Notify me when plant health drops'}
+                  {'Notification' in window && Notification.permission === 'denied' ? 'Notifications blocked by browser' : 'Notify me when plant health drops'}
                 </span>
                 <button
                   type="button"
                   onClick={handleToggleNotifications}
                   disabled={'Notification' in window && Notification.permission === 'denied'}
-                  className={`relative h-6 w-11 rounded-full transition-colors ${
-                    notificationsEnabled ? 'bg-primary' : 'bg-forest/15'
-                  } disabled:cursor-not-allowed disabled:opacity-40`}
+                  className={`relative h-6 w-11 rounded-full transition-colors ${notificationsEnabled ? 'bg-primary' : 'bg-forest/15'} disabled:cursor-not-allowed disabled:opacity-40`}
                   aria-label="Toggle browser notifications"
                 >
-                  <span
-                    className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
-                      notificationsEnabled ? 'translate-x-5' : 'translate-x-0'
-                    }`}
-                  />
+                  <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${notificationsEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
                 </button>
               </div>
             </div>
 
+            {/* ── Sensor cards with frozen overlay ── */}
             <div className="relative">
-              {/* Frozen data overlay */}
               {dataUntrusted && (
                 <div className="pointer-events-none absolute -inset-1 z-10 flex items-start justify-center rounded-3xl">
                   <div className="pointer-events-auto mt-20 rounded-2xl bg-white/95 px-5 py-3 shadow-lg backdrop-blur-sm">
                     <p className="text-center text-sm font-semibold text-forest/60">
-                      {deviceStatus === 'syncing' ? 'Waiting for sensor data…' : deviceStatus === 'never' ? 'No data yet' : 'Data frozen — device offline'}
+                      {deviceStatus === 'syncing' || deviceStatus === 'wifi_connected' ? 'Waiting for sensor data…' : deviceStatus === 'no_data' ? 'No data yet' : 'Data frozen — device offline'}
                     </p>
                   </div>
                 </div>
               )}
-
               <motion.div
                 key={`gauges-${selectedMac}`}
                 initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: dataUntrusted ? 0.35 : isStale ? 0.7 : 1, y: 0 }}
+                animate={{ opacity: dataUntrusted ? 0.35 : isDelayed ? 0.7 : 1, y: 0 }}
                 transition={{ duration: 0.3, delay: 0.05 }}
                 className={`grid gap-4 sm:grid-cols-2 lg:grid-cols-3 transition-all duration-500 ${
-                  dataUntrusted ? 'pointer-events-none select-none blur-[1px] grayscale-[40%]'
-                  : isStale ? 'grayscale-[15%]'
-                  : ''
+                  dataUntrusted ? 'pointer-events-none select-none blur-[1px] grayscale-[40%]' : isDelayed ? 'grayscale-[15%]' : ''
                 }`}
               >
                 <div className="section-card relative overflow-hidden">
-                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-                    <ThermometerIcon className="h-5 w-5 text-primary" />
-                  </div>
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10"><ThermometerIcon className="h-5 w-5 text-primary" /></div>
                   <p className="stat-label mb-1">Temperature</p>
-                  <p className="font-display text-2xl font-bold tabular-nums text-forest">
-                    {temp != null && !Number.isNaN(temp)
-                      ? `${displayTemp.toFixed(1)}°C`
-                      : '—'}
-                  </p>
-                  {deviceStatus === 'live' && (
-                    <div className="absolute right-3 top-3 h-1.5 w-1.5 rounded-full bg-green-400 shadow-[0_0_6px_rgba(34,197,94,0.4)]" />
-                  )}
+                  <p className="font-display text-2xl font-bold tabular-nums text-forest">{temp != null && !Number.isNaN(temp) ? `${displayTemp.toFixed(1)}°C` : '—'}</p>
+                  {deviceStatus === 'live' && <div className="absolute right-3 top-3 h-1.5 w-1.5 rounded-full bg-green-400 shadow-[0_0_6px_rgba(34,197,94,0.4)]" />}
                 </div>
                 <div className="section-card relative overflow-hidden lg:col-span-2">
                   <p className="stat-label mb-4 text-center">Soil moisture</p>
                   <CircularGauge percentage={displayGaugePct} label={soilLabel} size={170} strokeWidth={10} />
-                  {deviceStatus === 'live' && (
-                    <div className="absolute right-3 top-3 h-1.5 w-1.5 rounded-full bg-green-400 shadow-[0_0_6px_rgba(34,197,94,0.4)]" />
-                  )}
+                  {deviceStatus === 'live' && <div className="absolute right-3 top-3 h-1.5 w-1.5 rounded-full bg-green-400 shadow-[0_0_6px_rgba(34,197,94,0.4)]" />}
                 </div>
                 <div className="section-card relative overflow-hidden">
-                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-                    <SunIcon className="h-5 w-5 text-primary" />
-                  </div>
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10"><SunIcon className="h-5 w-5 text-primary" /></div>
                   <p className="stat-label mb-1">Light</p>
-                  <p className="font-display text-xl font-bold text-forest">
-                    {readings?.lightBright === true
-                      ? 'Bright'
-                      : readings?.lightBright === false
-                        ? 'Dim'
-                        : '—'}
-                  </p>
-                  {deviceStatus === 'live' && (
-                    <div className="absolute right-3 top-3 h-1.5 w-1.5 rounded-full bg-green-400 shadow-[0_0_6px_rgba(34,197,94,0.4)]" />
-                  )}
+                  <p className="font-display text-xl font-bold text-forest">{readings?.lightBright === true ? 'Bright' : readings?.lightBright === false ? 'Dim' : '—'}</p>
+                  {deviceStatus === 'live' && <div className="absolute right-3 top-3 h-1.5 w-1.5 rounded-full bg-green-400 shadow-[0_0_6px_rgba(34,197,94,0.4)]" />}
                 </div>
               </motion.div>
             </div>
 
             {/* History chart */}
             {selectedMac && !dataUntrusted && (
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: 0.06 }}
-              >
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.06 }}>
                 <HistoryChart deviceMac={selectedMac} />
               </motion.div>
             )}
 
             {/* Pump control */}
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: 0.08 }}
-              className="mt-4 flex items-center gap-4 section-card !p-4"
-            >
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.08 }} className="mt-4 flex items-center gap-4 section-card !p-4">
               <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${pumpActive ? 'bg-primary/20' : 'bg-forest/5'}`}>
                 <svg className={`h-5 w-5 transition-colors ${pumpActive ? 'text-primary' : 'text-forest/30'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" /></svg>
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-forest">Water pump</p>
-                <p className="text-xs text-forest/40">
-                  {pumpActive ? 'Pump is running…' : 'Send a manual watering pulse to the device.'}
-                </p>
+                <p className="text-xs text-forest/40">{pumpActive ? 'Pump is running…' : 'Send a manual watering pulse to the device.'}</p>
               </div>
               <button
                 type="button"
                 onClick={handleTriggerPump}
                 disabled={pumpCooldown || dataUntrusted}
                 className={`shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition ${
-                  pumpActive
-                    ? 'bg-primary/15 text-primary'
-                    : pumpCooldown
-                      ? 'bg-forest/5 text-forest/30'
-                      : 'bg-primary text-white hover:bg-primary-600 shadow-sm'
+                  pumpActive ? 'bg-primary/15 text-primary' : pumpCooldown ? 'bg-forest/5 text-forest/30' : 'bg-primary text-white hover:bg-primary-600 shadow-sm'
                 } disabled:opacity-50`}
               >
                 {pumpActive ? 'Running…' : pumpCooldown ? 'Sent' : 'Water now'}
@@ -976,190 +873,71 @@ export function DashboardPage() {
 
             {showProTip && (
               <div className="mt-6 rounded-2xl border border-terracotta/15 bg-terracotta-light/50 p-4">
-                <p className="text-sm font-medium text-terracotta">
-                  Pro tip
-                </p>
-                <p className="mt-1 text-sm text-forest/45">
-                  Temperature is above 28 °C. Consider lowering the target moisture threshold so the plant doesn’t get overwatered in the heat.
-                </p>
+                <p className="text-sm font-medium text-terracotta">Pro tip</p>
+                <p className="mt-1 text-sm text-forest/45">Temperature is above 28 °C. Consider lowering the target moisture threshold so the plant doesn't get overwatered in the heat.</p>
               </div>
             )}
 
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: 0.1 }}
-              className="section-card mt-6"
-            >
-              <p className="mb-1 stat-label">
-                Target moisture (raw threshold)
-              </p>
-              <p className="mb-3 text-sm text-forest/45">
-                Soil raw below this = “wet enough”. Drag to set target.
-              </p>
+            {/* Target moisture slider */}
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }} className="section-card mt-6">
+              <p className="mb-1 stat-label">Target moisture (raw threshold)</p>
+              <p className="mb-3 text-sm text-forest/45">Soil raw below this = "wet enough". Drag to set target.</p>
               <div className="flex flex-wrap items-center gap-4">
-                <input
-                  type="range"
-                  min={0}
-                  max={4095}
-                  value={targetSoil}
-                  onChange={(e) => {
-                    const v = Number(e.target.value)
-                    setTargetSoil(v)
-                    setTargetSoilInput(String(v))
-                  }}
-                  className="moisture-slider min-w-0 flex-1"
-                  aria-label="Target moisture raw value"
-                />
+                <input type="range" min={0} max={4095} value={targetSoil} onChange={(e) => { const v = Number(e.target.value); setTargetSoil(v); setTargetSoilInput(String(v)) }} className="moisture-slider min-w-0 flex-1" aria-label="Target moisture raw value" />
                 <span className="w-16 text-right text-lg font-semibold tabular-nums text-forest">{targetSoil}</span>
-                <button
-                  onClick={handleSaveTarget}
-                  className="btn-primary"
-                >
-                  Save
-                </button>
+                <button onClick={handleSaveTarget} className="btn-primary">Save</button>
               </div>
-              <p className="mt-3 text-xs text-forest/60">
-                Pump control is optional (no hardware). When enabled, the device pulses the pump until soilRaw ≤ target.
-              </p>
+              <p className="mt-3 text-xs text-forest/60">Pump control is optional (no hardware). When enabled, the device pulses the pump until soilRaw ≤ target.</p>
             </motion.div>
 
-            {/* Calibrate soil: mark dry / wet for accurate gauge */}
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: 0.08 }}
-              className="section-card mt-6"
-            >
-              <p className="mb-1 stat-label">
-                Calibrate soil sensor
-              </p>
-              <p className="mb-3 text-sm text-forest/45">
-                Mark one dry and one wet reading so the gauge uses your sensor range. Current raw: {readings?.soilRaw ?? '—'}
-              </p>
+            {/* Calibrate soil */}
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.08 }} className="section-card mt-6">
+              <p className="mb-1 stat-label">Calibrate soil sensor</p>
+              <p className="mb-3 text-sm text-forest/45">Mark one dry and one wet reading so the gauge uses your sensor range. Current raw: {readings?.soilRaw ?? '—'}</p>
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleMarkDry}
-                  disabled={readings?.soilRaw == null}
-                  className="btn-ghost disabled:opacity-40"
-                >
-                  Mark as dry
-                </button>
-                <button
-                  type="button"
-                  onClick={handleMarkWet}
-                  disabled={readings?.soilRaw == null}
-                  className="btn-ghost disabled:opacity-40"
-                >
-                  Mark as wet
-                </button>
+                <button type="button" onClick={handleMarkDry} disabled={readings?.soilRaw == null} className="btn-ghost disabled:opacity-40">Mark as dry</button>
+                <button type="button" onClick={handleMarkWet} disabled={readings?.soilRaw == null} className="btn-ghost disabled:opacity-40">Mark as wet</button>
                 {(calibration.boneDry != null || calibration.submerged != null) && (
-                  <span className="text-xs text-forest/60">
-                    Dry: {calibration.boneDry ?? '—'} · Wet: {calibration.submerged ?? '—'}
-                  </span>
+                  <span className="text-xs text-forest/60">Dry: {calibration.boneDry ?? '—'} · Wet: {calibration.submerged ?? '—'}</span>
                 )}
               </div>
             </motion.div>
 
-            {/* Plant profiles: list, add, link to device */}
-            <motion.section
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: 0.06 }}
-              className="section-card mt-6"
-            >
+            {/* Plant profiles */}
+            <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.06 }} className="section-card mt-6">
               <h2 className="stat-label mb-1">Plant profiles</h2>
-              <p className="mb-4 text-sm text-forest/45">
-                Add profiles for different plants. Link one to this device to show its name and type above.
-              </p>
+              <p className="mb-4 text-sm text-forest/45">Add profiles for different plants. Link one to this device to show its name and type above.</p>
               <form onSubmit={addNewProfile} className="mb-4 flex flex-wrap items-center gap-2">
-                <input
-                  type="text"
-                  value={newProfileName}
-                  onChange={(e) => setNewProfileName(e.target.value)}
-                  placeholder="Plant name"
-                  className="input-field"
-                />
+                <input type="text" value={newProfileName} onChange={(e) => setNewProfileName(e.target.value)} placeholder="Plant name" className="input-field" />
                 <select
                   value={newProfilePresetId ?? ''}
-                  onChange={(e) => {
-                    const id = e.target.value || null
-                    setNewProfilePresetId(id)
-                    const preset = id ? EXAMPLE_PLANTS.find((p) => p.id === id) : null
-                    setNewProfileType(preset ? preset.label : '')
-                  }}
+                  onChange={(e) => { const id = e.target.value || null; setNewProfilePresetId(id); setNewProfileType(id ? EXAMPLE_PLANTS.find((p) => p.id === id)?.label ?? '' : '') }}
                   className="input-field"
                 >
                   <option value="">— Example plant —</option>
-                  {EXAMPLE_PLANTS.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label} (target {p.targetSoil})
-                    </option>
-                  ))}
+                  {EXAMPLE_PLANTS.map((p) => <option key={p.id} value={p.id}>{p.label} (target {p.targetSoil})</option>)}
                 </select>
-                <input
-                  type="text"
-                  value={newProfileType}
-                  onChange={(e) => setNewProfileType(e.target.value)}
-                  placeholder="Type"
-                  className="min-w-[120px] input-field"
-                />
-                <button
-                  type="submit"
-                  className="btn-primary"
-                >
-                  Add profile
-                </button>
+                <input type="text" value={newProfileType} onChange={(e) => setNewProfileType(e.target.value)} placeholder="Type" className="min-w-[120px] input-field" />
+                <button type="submit" className="btn-primary">Add profile</button>
               </form>
               {Object.keys(profiles).length === 0 ? (
                 <p className="text-xs text-forest/60">No plant profiles yet. Add one above.</p>
               ) : (
                 <ul className="space-y-2">
-                  {Object.entries(profiles)
-                    .sort(([, a], [, b]) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
-                    .map(([id, p]) => (
-                      <li
-                        key={id}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-forest/10 bg-surface/50 px-3 py-2"
-                      >
-                        <span className="font-medium text-forest">{p.name}</span>
-                        {p.type && p.type !== '—' && (
-                          <span className="text-xs text-forest/60">{p.type}</span>
+                  {Object.entries(profiles).sort(([, a], [, b]) => (a.createdAt ?? 0) - (b.createdAt ?? 0)).map(([id, p]) => (
+                    <li key={id} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-forest/10 bg-surface/50 px-3 py-2">
+                      <span className="font-medium text-forest">{p.name}</span>
+                      {p.type && p.type !== '—' && <span className="text-xs text-forest/60">{p.type}</span>}
+                      {linkedProfileId === id && <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">Linked</span>}
+                      <div className="ml-auto flex items-center gap-1">
+                        {linkedProfileId !== id && selectedMac && (
+                          <button type="button" onClick={() => linkProfileToDevice(id)} className="rounded-xl bg-primary/15 px-2 py-1 text-xs font-medium text-primary transition hover:bg-primary/25">Use for this device</button>
                         )}
-                        {linkedProfileId === id && (
-                          <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">
-                            Linked
-                          </span>
-                        )}
-                        <div className="ml-auto flex items-center gap-1">
-                          {linkedProfileId !== id && selectedMac && (
-                            <button
-                              type="button"
-                              onClick={() => linkProfileToDevice(id)}
-                              className="rounded-xl bg-primary/15 px-2 py-1 text-xs font-medium text-primary transition hover:bg-primary/25"
-                            >
-                              Use for this device
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => openEditPlant(id)}
-                            className="rounded-full p-1.5 text-forest/50 transition hover:bg-mint/50 hover:text-forest"
-                            aria-label="Edit profile"
-                          >
-                            <PencilIcon className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => deleteProfile(id)}
-                            className="rounded-full px-2 py-1 text-xs text-terracotta transition hover:bg-terracotta/10"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </li>
-                    ))}
+                        <button type="button" onClick={() => openEditPlant(id)} className="rounded-full p-1.5 text-forest/50 transition hover:bg-mint/50 hover:text-forest" aria-label="Edit profile"><PencilIcon className="h-4 w-4" /></button>
+                        <button type="button" onClick={() => deleteProfile(id)} className="rounded-full px-2 py-1 text-xs text-terracotta transition hover:bg-terracotta/10">Remove</button>
+                      </div>
+                    </li>
+                  ))}
                 </ul>
               )}
             </motion.section>
@@ -1169,79 +947,29 @@ export function DashboardPage() {
 
         {/* Edit plant modal */}
         {editModalOpen && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-forest/20 p-4 backdrop-blur-sm"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="edit-plant-title"
-            onClick={closeEditPlant}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="glass-card-solid w-full max-w-sm rounded-3xl p-6 shadow-card"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h2 id="edit-plant-title" className="mb-4 text-lg font-semibold text-forest">
-                {editingProfileId ? 'Edit plant' : 'Add plant'}
-              </h2>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest/20 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="edit-plant-title" onClick={closeEditPlant}>
+            <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="glass-card-solid w-full max-w-sm rounded-3xl p-6 shadow-card" onClick={(e) => e.stopPropagation()}>
+              <h2 id="edit-plant-title" className="mb-4 text-lg font-semibold text-forest">{editingProfileId ? 'Edit plant' : 'Add plant'}</h2>
               <div className="mb-4 space-y-3">
                 <label className="block text-sm font-medium text-forest/80">
                   Name
-                  <input
-                    type="text"
-                    value={editForm.name}
-                    onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-                    placeholder="e.g. Living room Monstera"
-                    className="mt-1 w-full rounded-2xl border border-forest/10 bg-white px-3 py-2 text-sm text-forest focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
+                  <input type="text" value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} placeholder="e.g. Living room Monstera" className="mt-1 w-full rounded-2xl border border-forest/10 bg-white px-3 py-2 text-sm text-forest focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
                 </label>
                 <label className="block text-sm font-medium text-forest/80">
                   Example plant (sets type & target moisture)
-                  <select
-                    value={editPresetId ?? ''}
-                    onChange={(e) => {
-                      const id = e.target.value || null
-                      setEditPresetId(id)
-                      const preset = id ? EXAMPLE_PLANTS.find((p) => p.id === id) : null
-                      setEditForm((f) => ({ ...f, type: preset ? preset.label : f.type }))
-                    }}
-                    className="mt-1 w-full rounded-2xl border border-forest/10 bg-white px-3 py-2 text-sm text-forest focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  >
+                  <select value={editPresetId ?? ''} onChange={(e) => { const id = e.target.value || null; setEditPresetId(id); const preset = id ? EXAMPLE_PLANTS.find((p) => p.id === id) : null; setEditForm((f) => ({ ...f, type: preset ? preset.label : f.type })) }} className="mt-1 w-full rounded-2xl border border-forest/10 bg-white px-3 py-2 text-sm text-forest focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20">
                     <option value="">— Custom —</option>
-                    {EXAMPLE_PLANTS.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.label} (target {p.targetSoil})
-                      </option>
-                    ))}
+                    {EXAMPLE_PLANTS.map((p) => <option key={p.id} value={p.id}>{p.label} (target {p.targetSoil})</option>)}
                   </select>
                 </label>
                 <label className="block text-sm font-medium text-forest/80">
                   Type
-                  <input
-                    type="text"
-                    value={editForm.type}
-                    onChange={(e) => setEditForm((f) => ({ ...f, type: e.target.value }))}
-                    placeholder="e.g. Monstera, Succulent"
-                    className="mt-1 w-full rounded-2xl border border-forest/10 bg-white px-3 py-2 text-sm text-forest focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-                  />
+                  <input type="text" value={editForm.type} onChange={(e) => setEditForm((f) => ({ ...f, type: e.target.value }))} placeholder="e.g. Monstera, Succulent" className="mt-1 w-full rounded-2xl border border-forest/10 bg-white px-3 py-2 text-sm text-forest focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
                 </label>
               </div>
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={closeEditPlant}
-                  className="flex-1 rounded-2xl border border-forest/10 bg-white py-2.5 text-sm font-medium text-forest transition hover:bg-mint/30"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => saveEditPlant(!editingProfileId)}
-                  className="flex-1 rounded-2xl bg-primary py-2.5 text-sm font-medium text-white transition hover:opacity-90"
-                >
-                  {editingProfileId ? 'Save' : 'Save and use for this device'}
-                </button>
+                <button type="button" onClick={closeEditPlant} className="flex-1 rounded-2xl border border-forest/10 bg-white py-2.5 text-sm font-medium text-forest transition hover:bg-mint/30">Cancel</button>
+                <button type="button" onClick={() => saveEditPlant(!editingProfileId)} className="flex-1 rounded-2xl bg-primary py-2.5 text-sm font-medium text-white transition hover:opacity-90">{editingProfileId ? 'Save' : 'Save and use for this device'}</button>
               </div>
             </motion.div>
           </div>
@@ -1250,44 +978,16 @@ export function DashboardPage() {
         {/* Invite user section */}
         <section className="section-card mt-10">
           <h2 className="stat-label mb-1">Invite user</h2>
-          <p className="mb-3 text-sm text-forest/45">
-            Share the app link. New users sign up with email and password, then can claim their own devices.
-          </p>
+          <p className="mb-3 text-sm text-forest/45">Share the app link. New users sign up with email and password, then can claim their own devices.</p>
           <div className="mb-4 flex flex-wrap items-center gap-2">
-            <input
-              type="text"
-              readOnly
-              value={appUrl}
-              className="min-w-0 flex-1 rounded-2xl border border-forest/10 bg-white px-3 py-2 text-sm text-forest focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
-            />
-            <button
-              type="button"
-              onClick={handleCopyUrl}
-              className="btn-ghost"
-            >
-              {copyOk ? 'Copied!' : 'Copy link'}
-            </button>
+            <input type="text" readOnly value={appUrl} className="min-w-0 flex-1 rounded-2xl border border-forest/10 bg-white px-3 py-2 text-sm text-forest focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20" />
+            <button type="button" onClick={handleCopyUrl} className="btn-ghost">{copyOk ? 'Copied!' : 'Copy link'}</button>
           </div>
           <form onSubmit={handleInvite} className="mb-3 flex flex-wrap items-center gap-2">
-            <input
-              type="email"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="Email to add to invite list"
-              className="input-field"
-            />
-            <button
-              type="submit"
-              className="btn-primary"
-            >
-              Add to invite list
-            </button>
+            <input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="Email to add to invite list" className="input-field" />
+            <button type="submit" className="btn-primary">Add to invite list</button>
           </form>
-          {invitedList.length > 0 && (
-            <p className="text-xs text-forest/60">
-              Invited: {invitedList.join(', ')} (they still need to sign up at the link above).
-            </p>
-          )}
+          {invitedList.length > 0 && <p className="text-xs text-forest/60">Invited: {invitedList.join(', ')} (they still need to sign up at the link above).</p>}
         </section>
       </div>
     </div>
