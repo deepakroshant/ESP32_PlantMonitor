@@ -45,6 +45,7 @@ export function CircularGauge({ percentage, label, size = 180, strokeWidth = 11 
             fill="none"
             stroke="rgba(27,47,39,0.06)"
             strokeWidth={strokeWidth}
+            className="gauge-track"
           />
 
           {/* Progress arc */}
@@ -63,13 +64,13 @@ export function CircularGauge({ percentage, label, size = 180, strokeWidth = 11 
         {/* Centre label */}
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span
-            className="font-display tabular-nums text-forest"
+            className="circular-gauge-value font-display tabular-nums text-forest"
             style={{ fontSize: size > 140 ? '2.4rem' : '1.75rem', fontWeight: 700, lineHeight: 1 }}
             aria-label={`${Math.round(clamped)} percent`}
           >
             {Math.round(clamped)}%
           </span>
-          <span className="mt-2 text-[11px] font-semibold uppercase tracking-[0.11em] text-forest/45">
+          <span className="circular-gauge-label mt-2 text-[11px] font-semibold uppercase tracking-[0.11em] text-forest/45">
             {label}
           </span>
         </div>

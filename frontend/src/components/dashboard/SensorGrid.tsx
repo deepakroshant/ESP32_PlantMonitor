@@ -101,14 +101,14 @@ export function SensorGrid({
           className="sensor-card relative overflow-hidden"
         >
           {isLive && <LiveDot />}
-          <div className="icon-pill mb-4">
-            <ThermometerIcon className="h-5 w-5 text-primary" />
+          <div className="icon-pill mb-4 dark:bg-primary/25">
+            <ThermometerIcon className="h-5 w-5 text-primary dark:text-primary-300" />
           </div>
           <p className="stat-label mb-2">Temperature</p>
-          <p className="font-display text-3xl font-bold tabular-nums text-forest leading-none">
+          <p className="font-display text-3xl font-bold tabular-nums text-forest dark:text-slate-100 leading-none">
             {temp != null && !Number.isNaN(temp) ? `${displayTemp.toFixed(1)}°` : '—'}
             {temp != null && !Number.isNaN(temp) && (
-              <span className="ml-1 text-base font-medium text-forest-400">C</span>
+              <span className="ml-1 text-base font-medium text-forest-400 dark:text-slate-400">C</span>
             )}
           </p>
         </motion.div>
@@ -121,11 +121,11 @@ export function SensorGrid({
           className="sensor-card relative overflow-hidden"
         >
           {isLive && <LiveDot />}
-          <div className="icon-pill mb-4">
-            <SunIcon className="h-5 w-5 text-primary" />
+          <div className="icon-pill mb-4 dark:bg-primary/25">
+            <SunIcon className="h-5 w-5 text-primary dark:text-primary-300" />
           </div>
           <p className="stat-label mb-2">Light</p>
-          <p className="font-display text-3xl font-bold text-forest leading-none">
+          <p className="font-display text-3xl font-bold text-forest dark:text-slate-100 leading-none">
             {readings?.lightBright === true ? 'Bright' : readings?.lightBright === false ? 'Dim' : '—'}
           </p>
         </motion.div>
@@ -151,13 +151,13 @@ export function SensorGrid({
             className="sensor-card relative overflow-hidden"
           >
             {isLive && <LiveDot />}
-            <div className="icon-pill mb-4">
-              <BarometerIcon className="h-5 w-5 text-primary" />
+            <div className="icon-pill mb-4 dark:bg-primary/25">
+              <BarometerIcon className="h-5 w-5 text-primary dark:text-primary-300" />
             </div>
             <p className="stat-label mb-2">Pressure</p>
-            <p className="font-display text-3xl font-bold tabular-nums text-forest leading-none">
+            <p className="font-display text-3xl font-bold tabular-nums text-forest dark:text-slate-100 leading-none">
               {formatPressure(readings!.pressure!)}
-              <span className="ml-1 text-base font-medium text-forest-400">hPa</span>
+              <span className="ml-1 text-base font-medium text-forest-400 dark:text-slate-400">hPa</span>
             </p>
           </motion.div>
         )}
@@ -171,13 +171,13 @@ export function SensorGrid({
             className="sensor-card relative overflow-hidden"
           >
             {isLive && <LiveDot />}
-            <div className="icon-pill mb-4">
-              <DropletIcon className="h-5 w-5 text-primary" />
+            <div className="icon-pill mb-4 dark:bg-primary/25">
+              <DropletIcon className="h-5 w-5 text-primary dark:text-primary-300" />
             </div>
             <p className="stat-label mb-2">Humidity</p>
-            <p className="font-display text-3xl font-bold tabular-nums text-forest leading-none">
+            <p className="font-display text-3xl font-bold tabular-nums text-forest dark:text-slate-100 leading-none">
               {readings!.humidity!.toFixed(1)}
-              <span className="ml-1 text-base font-medium text-forest-400">%</span>
+              <span className="ml-1 text-base font-medium text-forest-400 dark:text-slate-400">%</span>
             </p>
           </motion.div>
         )}

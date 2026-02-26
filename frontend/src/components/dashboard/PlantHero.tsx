@@ -48,12 +48,12 @@ export function PlantHero({
   const chip = statusChip[deviceStatus]
 
   const healthVariant = dataUntrusted
-    ? { bg: 'bg-forest/5', border: 'border-forest/10', text: 'text-forest/25' }
+    ? { bg: 'bg-forest/5 dark:bg-slate-700/50', border: 'border-forest/10 dark:border-slate-600', text: 'text-forest/25 dark:text-slate-400' }
     : isDelayed
-    ? { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-600' }
+    ? { bg: 'bg-amber-50 dark:bg-amber-900/30', border: 'border-amber-200 dark:border-amber-700/50', text: 'text-amber-600 dark:text-amber-300' }
     : healthOk
-    ? { bg: 'bg-primary/10', border: 'border-primary/25', text: 'text-primary' }
-    : { bg: 'bg-terracotta/10', border: 'border-terracotta/25', text: 'text-terracotta' }
+    ? { bg: 'bg-primary/10 dark:bg-primary/25', border: 'border-primary/25 dark:border-primary/40', text: 'text-primary dark:text-primary-300' }
+    : { bg: 'bg-terracotta/10 dark:bg-red-900/30', border: 'border-terracotta/25 dark:border-red-800/50', text: 'text-terracotta dark:text-red-300' }
 
   const hasLiveData = !dataUntrusted && readings
   const temp = hasLiveData && readings.temperature != null && !Number.isNaN(readings.temperature)
@@ -79,7 +79,7 @@ export function PlantHero({
         {/* Plant icon */}
         <div
           className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl transition-all duration-500 sm:h-14 sm:w-14 sm:rounded-2xl ${
-            dataUntrusted ? 'bg-forest/5' : ''
+            dataUntrusted ? 'bg-forest/5 dark:bg-slate-700/50' : ''
           }`}
           style={dataUntrusted ? {} : {
             background: 'linear-gradient(135deg, rgba(59,122,87,0.18) 0%, rgba(59,122,87,0.08) 100%)',
@@ -88,7 +88,7 @@ export function PlantHero({
         >
           <PlantIcon
             className={`h-6 w-6 transition-colors duration-500 sm:h-7 sm:w-7 ${
-              dataUntrusted ? 'text-forest/25' : 'text-primary'
+              dataUntrusted ? 'text-forest/25 dark:text-slate-500' : 'text-primary dark:text-primary-300'
             }`}
           />
         </div>
@@ -98,7 +98,7 @@ export function PlantHero({
           <div className="flex items-center gap-1.5">
             <p
               className={`font-display text-base font-bold leading-tight transition-colors duration-300 sm:text-lg ${
-                dataUntrusted ? 'text-forest/40' : 'text-forest'
+                dataUntrusted ? 'text-forest/40 dark:text-slate-400' : 'text-forest dark:text-slate-100'
               }`}
             >
               {plantName}
@@ -106,7 +106,7 @@ export function PlantHero({
             <button
               type="button"
               onClick={onEditPlant}
-              className="rounded-full p-1 text-forest/35 transition hover:bg-sage-100 hover:text-forest"
+              className="rounded-full p-1 text-forest/35 transition hover:bg-sage-100 hover:text-forest dark:text-slate-500 dark:hover:bg-slate-600 dark:hover:text-slate-200"
               aria-label="Edit plant name and type"
             >
               <PencilIcon className="h-3 w-3" />
@@ -115,16 +115,16 @@ export function PlantHero({
 
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
             {plantType && (
-              <span className="text-xs text-forest-400">{plantType}</span>
+              <span className="text-xs text-forest-400 dark:text-slate-400">{plantType}</span>
             )}
             {chip && !dataUntrusted && (
-              <span className="flex items-center gap-1 rounded-full bg-forest/5 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-forest/50">
+              <span className="flex items-center gap-1 rounded-full bg-forest/5 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-forest/50 dark:bg-slate-600/60 dark:text-slate-300">
                 <span className={`h-1.5 w-1.5 rounded-full ${chip.dot} ${deviceStatus === 'live' ? 'animate-pulse' : ''}`} />
                 {chip.text}
               </span>
             )}
             {!plantType && !chip && (
-              <span className="text-xs text-forest/35">No plant type set</span>
+              <span className="text-xs text-forest/35 dark:text-slate-500">No plant type set</span>
             )}
           </div>
         </div>
@@ -144,12 +144,12 @@ export function PlantHero({
 
       {/* Profile-based tips */}
       {profileTips.length > 0 && !dataUntrusted && (
-        <div className="mt-3 flex flex-wrap gap-2 border-t border-forest/5 pt-3">
+        <div className="mt-3 flex flex-wrap gap-2 border-t border-forest/5 dark:border-slate-600/50 pt-3">
           {profileTips.filter((t) => t.severity !== 'ok').map((t) => (
             <span
               key={t.id}
               className={`rounded-lg px-2.5 py-1 text-xs font-medium ${
-                t.severity === 'warning' ? 'bg-amber-500/10 text-amber-700' : 'bg-sky-500/10 text-sky-700'
+                t.severity === 'warning' ? 'bg-amber-500/10 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' : 'bg-sky-500/10 text-sky-700 dark:bg-sky-500/20 dark:text-sky-300'
               }`}
             >
               {t.message}
@@ -160,19 +160,19 @@ export function PlantHero({
 
       {/* Live quick stats */}
       {(quickStats.length > 0 || lastWateredEpoch != null || todayTotalMs > 0) && (
-        <div className="mt-3 flex flex-wrap gap-2 border-t border-forest/5 pt-3">
+        <div className="mt-3 flex flex-wrap gap-2 border-t border-forest/5 dark:border-slate-600/50 pt-3">
           {quickStats.map((s) => (
-            <span key={s} className="rounded-lg bg-forest/[0.03] px-2.5 py-1 text-xs font-medium tabular-nums text-forest-500">
+            <span key={s} className="rounded-lg bg-forest/[0.03] px-2.5 py-1 text-xs font-medium tabular-nums text-forest-500 dark:bg-slate-600/50 dark:text-slate-300">
               {s}
             </span>
           ))}
           {lastWateredEpoch != null && lastWateredEpoch > 0 && (
-            <span className="rounded-lg bg-sky-500/10 px-2.5 py-1 text-xs font-medium text-sky-700">
+            <span className="rounded-lg bg-sky-500/10 px-2.5 py-1 text-xs font-medium text-sky-700 dark:bg-sky-500/25 dark:text-sky-300">
               Last watered {formatSecondsAgo(lastWateredEpoch)}
             </span>
           )}
           {todayTotalMs > 0 && (
-            <span className="rounded-lg bg-sky-500/10 px-2.5 py-1 text-xs font-medium text-sky-700">
+            <span className="rounded-lg bg-sky-500/10 px-2.5 py-1 text-xs font-medium text-sky-700 dark:bg-sky-500/25 dark:text-sky-300">
               Today: {(todayTotalMs / 1000).toFixed(0)}s total
             </span>
           )}

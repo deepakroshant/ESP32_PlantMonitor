@@ -496,8 +496,7 @@ export function DashboardPage() {
           variants={fadeSlideUp}
           initial="hidden"
           animate="visible"
-          className="mb-7 flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-white/80 px-4 py-3 shadow-card backdrop-blur-md sm:px-6 sm:py-4"
-          style={{ border: '1px solid rgba(27,47,39,0.06)' }}
+          className="mb-7 flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-forest/[0.06] bg-white/80 px-4 py-3 shadow-card backdrop-blur-md sm:px-6 sm:py-4 dark:border-slate-600/50 dark:bg-slate-800/90"
         >
           <div className="flex items-center gap-3">
             <div
@@ -506,7 +505,7 @@ export function DashboardPage() {
             >
               <PlantIcon className="h-4.5 w-4.5 text-white" />
             </div>
-            <h1 className="font-display text-lg font-bold tracking-tight text-forest sm:text-xl">Smart Plant Pro</h1>
+            <h1 className="font-display text-lg font-bold tracking-tight text-forest dark:text-slate-100 sm:text-xl">Smart Plant Pro</h1>
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggleIcon />
@@ -519,7 +518,7 @@ export function DashboardPage() {
               </div>
             )}
             <Link to="/claim" className="btn-ghost flex items-center gap-1.5 !py-2 !px-3 !text-xs"><PlusIcon className="h-3.5 w-3.5" /><span className="hidden sm:inline">Add device</span></Link>
-            <button onClick={() => signOut()} className="btn-ghost flex items-center gap-1.5 !py-2 !px-3 !text-xs text-forest/45 hover:text-red-500"><LogoutIcon className="h-3.5 w-3.5" /><span className="hidden sm:inline">Sign out</span></button>
+            <button onClick={() => signOut()} className="btn-ghost flex items-center gap-1.5 !py-2 !px-3 !text-xs text-forest/45 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400"><LogoutIcon className="h-3.5 w-3.5" /><span className="hidden sm:inline">Sign out</span></button>
           </div>
         </motion.header>
 
@@ -611,21 +610,21 @@ export function DashboardPage() {
               {/* Alert + notification toggle */}
               <div className="mb-3 space-y-2">
                 {lastAlert && (
-                  <motion.div variants={fadeSlideUp} initial="hidden" animate="visible" className="flex items-start gap-3 rounded-2xl border border-terracotta/18 bg-red-50/70 px-4 py-3">
-                    <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-terracotta/12">
-                      <svg className="h-3 w-3 text-terracotta" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 15.75h.008" /></svg>
+                  <motion.div variants={fadeSlideUp} initial="hidden" animate="visible" className="flex items-start gap-3 rounded-2xl border border-terracotta/18 bg-red-50/70 px-4 py-3 dark:border-red-800/50 dark:bg-red-900/40">
+                    <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-terracotta/12 dark:bg-red-500/30">
+                      <svg className="h-3 w-3 text-terracotta dark:text-red-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 15.75h.008" /></svg>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-forest">{lastAlert.message}</p>
-                      {lastAlert.timestamp > 0 && <p className="mt-0.5 text-xs text-forest/40">{new Date(lastAlert.timestamp * 1000).toLocaleString()}</p>}
+                      <p className="text-sm font-medium text-forest dark:text-slate-100">{lastAlert.message}</p>
+                      {lastAlert.timestamp > 0 && <p className="mt-0.5 text-xs text-forest/40 dark:text-slate-400">{new Date(lastAlert.timestamp * 1000).toLocaleString()}</p>}
                     </div>
-                    <button type="button" onClick={handleAckAlert} className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium text-terracotta transition hover:bg-terracotta/10">Dismiss</button>
+                    <button type="button" onClick={handleAckAlert} className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium text-terracotta transition hover:bg-terracotta/10 dark:text-red-300 dark:hover:bg-red-800/50">Dismiss</button>
                   </motion.div>
                 )}
-                <div className="flex items-center gap-3 rounded-2xl border border-forest/5 bg-white/70 px-3 py-2.5">
-                  <svg className="h-3.5 w-3.5 shrink-0 text-forest/25" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>
-                  <span className="flex-1 text-xs text-forest-400">{'Notification' in window && Notification.permission === 'denied' ? 'Notifications blocked by browser' : 'Notify me when plant health drops'}</span>
-                  <button type="button" onClick={handleToggleNotifications} disabled={'Notification' in window && Notification.permission === 'denied'} className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${notificationsEnabled ? 'bg-primary shadow-glow' : 'bg-forest/12'} disabled:cursor-not-allowed disabled:opacity-40`} aria-label="Toggle browser notifications">
+                <div className="flex items-center gap-3 rounded-2xl border border-forest/5 bg-white/70 px-3 py-2.5 dark:border-slate-600 dark:bg-slate-800/80">
+                  <svg className="h-3.5 w-3.5 shrink-0 text-forest/25 dark:text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>
+                  <span className="flex-1 text-xs text-forest-400 dark:text-slate-300">{'Notification' in window && Notification.permission === 'denied' ? 'Notifications blocked by browser' : 'Notify me when plant health drops'}</span>
+                  <button type="button" onClick={handleToggleNotifications} disabled={'Notification' in window && Notification.permission === 'denied'} className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${notificationsEnabled ? 'bg-primary shadow-glow' : 'bg-forest/12 dark:bg-slate-600'} disabled:cursor-not-allowed disabled:opacity-40`} aria-label="Toggle browser notifications">
                     <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${notificationsEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
                   </button>
                 </div>
@@ -650,12 +649,12 @@ export function DashboardPage() {
 
               {/* Pump control */}
               <motion.div variants={fadeSlideUp} initial="hidden" animate="visible" className="mt-3 flex items-center gap-3 section-card !p-4">
-                <div className={`icon-pill shrink-0 transition-all duration-300 ${pumpActive ? '!bg-primary/18 ring-1 ring-primary/20' : ''}`}>
-                  <svg className={`h-5 w-5 transition-colors duration-300 ${pumpActive ? 'text-primary' : 'text-forest/30'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" /></svg>
+                <div className={`icon-pill shrink-0 transition-all duration-300 ${pumpActive ? '!bg-primary/18 ring-1 ring-primary/20 dark:!bg-primary/35 dark:ring-primary/40' : ''}`}>
+                  <svg className={`h-5 w-5 transition-colors duration-300 ${pumpActive ? 'text-primary dark:text-primary-300' : 'text-forest/30 dark:text-slate-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" /></svg>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-forest">Water pump</p>
-                  <p className="mt-0.5 text-xs text-forest-400">{pumpActive ? 'Pump is running…' : 'Manual watering pulse'}</p>
+                  <p className="text-sm font-semibold text-forest dark:text-slate-100">Water pump</p>
+                  <p className="mt-0.5 text-xs text-forest-400 dark:text-slate-400">{pumpActive ? 'Pump is running…' : 'Manual watering pulse'}</p>
                 </div>
                 <button type="button" onClick={handleTriggerPump} disabled={pumpCooldown || dataUntrusted} className={`shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all ${pumpActive ? 'bg-primary/12 text-primary ring-1 ring-primary/20' : pumpCooldown ? 'bg-forest/5 text-forest/30' : 'btn-primary !rounded-xl'} disabled:opacity-50`}>
                   {pumpActive ? 'Running…' : pumpCooldown ? 'Sent ✓' : 'Water now'}
@@ -672,22 +671,22 @@ export function DashboardPage() {
               {/* ── Collapsible settings ── */}
               <div className="mt-4 space-y-2.5">
                 <CollapsibleSection title="Target moisture" subtitle={`Current: ${targetSoil}`} defaultOpen>
-                  <p className="mb-4 text-sm text-forest-400">Soil raw below this value = "wet enough". Drag to set.</p>
+                  <p className="mb-4 text-sm text-forest-400 dark:text-slate-400">Soil raw below this value = "wet enough". Drag to set.</p>
                   <div className="flex flex-wrap items-center gap-4">
                     <input type="range" min={0} max={4095} value={targetSoil} onChange={(e) => { const v = Number(e.target.value); setTargetSoil(v); setTargetSoilInput(String(v)) }} className="moisture-slider min-w-0 flex-1" aria-label="Target moisture raw value" />
-                    <span className="w-16 text-right font-display text-xl font-bold tabular-nums text-forest">{targetSoil}</span>
+                    <span className="w-16 text-right font-display text-xl font-bold tabular-nums text-forest dark:text-slate-100">{targetSoil}</span>
                     <button onClick={handleSaveTarget} className="btn-primary">Save</button>
                   </div>
-                  <p className="mt-3 text-xs text-forest/35">Pump control is optional. When enabled, the device pulses the pump until soilRaw ≤ target.</p>
+                  <p className="mt-3 text-xs text-forest/35 dark:text-slate-500">Pump control is optional. When enabled, the device pulses the pump until soilRaw ≤ target.</p>
                 </CollapsibleSection>
 
                 <CollapsibleSection title="Calibrate soil sensor" subtitle={calibration.boneDry != null ? `Dry: ${calibration.boneDry} · Wet: ${calibration.submerged ?? '—'}` : 'Not calibrated'}>
-                  <p className="mb-3 text-sm text-forest-400">Mark one dry and one wet reading so the gauge uses your exact sensor range. Current raw: <span className="font-mono font-medium text-forest">{readings?.soilRaw ?? '—'}</span></p>
+                  <p className="mb-3 text-sm text-forest-400 dark:text-slate-400">Mark one dry and one wet reading so the gauge uses your exact sensor range. Current raw: <span className="font-mono font-medium text-forest dark:text-slate-100">{readings?.soilRaw ?? '—'}</span></p>
                   <div className="flex flex-wrap items-center gap-2">
                     <button type="button" onClick={handleMarkDry} disabled={readings?.soilRaw == null} className="btn-ghost disabled:opacity-40">Mark as dry</button>
                     <button type="button" onClick={handleMarkWet} disabled={readings?.soilRaw == null} className="btn-ghost disabled:opacity-40">Mark as wet</button>
                     {(calibration.boneDry != null || calibration.submerged != null) && (
-                      <span className="rounded-lg bg-surface px-2.5 py-1 text-xs text-forest-400">
+                      <span className="rounded-lg bg-surface px-2.5 py-1 text-xs text-forest-400 dark:bg-slate-700/60 dark:text-slate-400">
                         Dry: <span className="font-mono font-medium">{calibration.boneDry ?? '—'}</span> · Wet: <span className="font-mono font-medium">{calibration.submerged ?? '—'}</span>
                       </span>
                     )}
@@ -695,30 +694,30 @@ export function DashboardPage() {
                 </CollapsibleSection>
 
                 <CollapsibleSection title="Auto watering schedule" subtitle={schedule.enabled ? `Daily at ${String(schedule.hour ?? 8).padStart(2, '0')}:${String(schedule.minute ?? 0).padStart(2, '0')} · Max ${schedule.maxSecondsPerDay ?? 120}s/day` : 'Off'}>
-                  <p className="mb-4 text-sm text-forest-400">Water automatically when soil is dry at a set time. Uses hysteresis, max seconds per day, and cooldown for safety.</p>
+                  <p className="mb-4 text-sm text-forest-400 dark:text-slate-400">Water automatically when soil is dry at a set time. Uses hysteresis, max seconds per day, and cooldown for safety.</p>
                   <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
                     <label className="flex items-center gap-2">
-                      <input type="checkbox" checked={scheduleInput.enabled} onChange={(e) => setScheduleInput((s) => ({ ...s, enabled: e.target.checked }))} className="rounded border-forest/20" />
-                      <span className="text-sm font-medium text-forest-600">Enabled</span>
+                      <input type="checkbox" checked={scheduleInput.enabled} onChange={(e) => setScheduleInput((s) => ({ ...s, enabled: e.target.checked }))} className="rounded border-forest/20 dark:border-slate-500" />
+                      <span className="text-sm font-medium text-forest-600 dark:text-slate-300">Enabled</span>
                     </label>
                     <label className="block">
-                      <span className="text-xs text-forest-400">Hour (0–23)</span>
+                      <span className="text-xs text-forest-400 dark:text-slate-400">Hour (0–23)</span>
                       <input type="number" min={0} max={23} value={scheduleInput.hour} onChange={(e) => setScheduleInput((s) => ({ ...s, hour: parseInt(e.target.value, 10) || 0 }))} className="input-field mt-0.5 w-full" />
                     </label>
                     <label className="block">
-                      <span className="text-xs text-forest-400">Minute (0–59)</span>
+                      <span className="text-xs text-forest-400 dark:text-slate-400">Minute (0–59)</span>
                       <input type="number" min={0} max={59} value={scheduleInput.minute} onChange={(e) => setScheduleInput((s) => ({ ...s, minute: parseInt(e.target.value, 10) || 0 }))} className="input-field mt-0.5 w-full" />
                     </label>
                     <label className="block">
-                      <span className="text-xs text-forest-400">Hysteresis (raw)</span>
+                      <span className="text-xs text-forest-400 dark:text-slate-400">Hysteresis (raw)</span>
                       <input type="number" min={0} max={2000} value={scheduleInput.hysteresis} onChange={(e) => setScheduleInput((s) => ({ ...s, hysteresis: parseInt(e.target.value, 10) || 0 }))} className="input-field mt-0.5 w-full" />
                     </label>
                     <label className="block">
-                      <span className="text-xs text-forest-400">Max s/day</span>
+                      <span className="text-xs text-forest-400 dark:text-slate-400">Max s/day</span>
                       <input type="number" min={10} max={600} value={scheduleInput.maxSecondsPerDay} onChange={(e) => setScheduleInput((s) => ({ ...s, maxSecondsPerDay: parseInt(e.target.value, 10) || 60 }))} className="input-field mt-0.5 w-full" />
                     </label>
                     <label className="block">
-                      <span className="text-xs text-forest-400">Cooldown (min)</span>
+                      <span className="text-xs text-forest-400 dark:text-slate-400">Cooldown (min)</span>
                       <input type="number" min={5} max={1440} value={scheduleInput.cooldownMinutes} onChange={(e) => setScheduleInput((s) => ({ ...s, cooldownMinutes: parseInt(e.target.value, 10) || 30 }))} className="input-field mt-0.5 w-full" />
                     </label>
                   </div>
@@ -729,7 +728,7 @@ export function DashboardPage() {
                 </CollapsibleSection>
 
                 <CollapsibleSection title="Plant profiles" subtitle={`${Object.keys(profiles).length} profile${Object.keys(profiles).length !== 1 ? 's' : ''}`}>
-                  <p className="mb-4 text-sm text-forest-400">Add profiles for different plants. Link one to this device to track its name and type.</p>
+                  <p className="mb-4 text-sm text-forest-400 dark:text-slate-400">Add profiles for different plants. Link one to this device to track its name and type.</p>
                   <form onSubmit={addNewProfile} className="mb-4 flex flex-wrap items-center gap-2">
                     <input type="text" value={newProfileName} onChange={(e) => setNewProfileName(e.target.value)} placeholder="Plant name" className="input-field" />
                     <select value={newProfilePresetId ?? ''} onChange={(e) => { const id = e.target.value || null; setNewProfilePresetId(id); setNewProfileType(id ? EXAMPLE_PLANTS.find((p) => p.id === id)?.label ?? '' : '') }} className="input-field">
@@ -744,16 +743,16 @@ export function DashboardPage() {
                   ) : (
                     <ul className="space-y-2">
                       {Object.entries(profiles).sort(([, a], [, b]) => (a.createdAt ?? 0) - (b.createdAt ?? 0)).map(([id, p]) => (
-                        <li key={id} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-forest/8 bg-surface/60 px-4 py-3 transition-colors hover:bg-white/80">
+                        <li key={id} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-forest/8 bg-surface/60 px-4 py-3 transition-colors hover:bg-white/80 dark:border-slate-600/50 dark:bg-slate-700/50 dark:hover:bg-slate-600/60">
                           <div className="flex items-center gap-2">
-                            <span className="font-medium text-forest">{p.name}</span>
-                            {p.type && p.type !== '—' && <span className="rounded-md bg-sage-100 px-2 py-0.5 text-xs text-forest-400">{p.type}</span>}
-                            {linkedProfileId === id && <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">Linked</span>}
+                            <span className="font-medium text-forest dark:text-slate-100">{p.name}</span>
+                            {p.type && p.type !== '—' && <span className="rounded-md bg-sage-100 px-2 py-0.5 text-xs text-forest-400 dark:bg-slate-600 dark:text-slate-400">{p.type}</span>}
+                            {linkedProfileId === id && <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary dark:bg-primary/30 dark:text-primary-300">Linked</span>}
                           </div>
                           <div className="ml-auto flex items-center gap-1">
-                            {linkedProfileId !== id && selectedMac && <button type="button" onClick={() => linkProfileToDevice(id)} className="rounded-xl bg-primary/12 px-2.5 py-1 text-xs font-medium text-primary transition hover:bg-primary/22">Use for device</button>}
-                            <button type="button" onClick={() => openEditPlant(id)} className="rounded-full p-1.5 text-forest/40 transition hover:bg-sage-100 hover:text-forest" aria-label="Edit profile"><PencilIcon className="h-3.5 w-3.5" /></button>
-                            <button type="button" onClick={() => deleteProfile(id)} className="rounded-full px-2 py-1 text-xs text-terracotta/70 transition hover:bg-red-50 hover:text-terracotta">Remove</button>
+                            {linkedProfileId !== id && selectedMac && <button type="button" onClick={() => linkProfileToDevice(id)} className="rounded-xl bg-primary/12 px-2.5 py-1 text-xs font-medium text-primary transition hover:bg-primary/22 dark:bg-primary/25 dark:hover:bg-primary/35">Use for device</button>}
+                            <button type="button" onClick={() => openEditPlant(id)} className="rounded-full p-1.5 text-forest/40 transition hover:bg-sage-100 hover:text-forest dark:text-slate-500 dark:hover:bg-slate-600 dark:hover:text-slate-200" aria-label="Edit profile"><PencilIcon className="h-3.5 w-3.5" /></button>
+                            <button type="button" onClick={() => deleteProfile(id)} className="rounded-full px-2 py-1 text-xs text-terracotta/70 transition hover:bg-red-50 hover:text-terracotta dark:text-red-400 dark:hover:bg-red-900/50">Remove</button>
                           </div>
                         </li>
                       ))}

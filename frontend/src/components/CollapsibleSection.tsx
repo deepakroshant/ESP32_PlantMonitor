@@ -23,7 +23,7 @@ export function CollapsibleSection({ title, subtitle, defaultOpen = false, child
         <div className="min-w-0">
           <p className="stat-label">{title}</p>
           {subtitle && !open && (
-            <p className="mt-1 text-xs text-forest/35 line-clamp-1">{subtitle}</p>
+            <p className="mt-1 text-xs text-forest/35 dark:text-slate-500 line-clamp-1">{subtitle}</p>
           )}
         </div>
         <svg

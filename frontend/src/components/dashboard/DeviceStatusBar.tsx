@@ -52,7 +52,7 @@ export function DeviceStatusBar({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={spring.gentle}
-      className={`mb-3 rounded-2xl border ${statusMeta.border} ${statusMeta.bg} p-3 transition-colors duration-500 sm:p-4`}
+      className={`mb-3 rounded-2xl border ${statusMeta.border} ${statusMeta.bg} ${statusMeta.darkBorder} ${statusMeta.darkBg} p-3 transition-colors duration-500 sm:p-4`}
       style={{ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
     >
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -84,8 +84,8 @@ export function DeviceStatusBar({
             disabled={isResetPending}
             className={`rounded-xl border px-3 py-2 text-xs font-medium transition-all ${
               isResetPending
-                ? 'cursor-not-allowed border-forest/10 bg-white/40 text-forest/30'
-                : 'border-red-200/70 bg-white/70 text-red-500 hover:bg-red-50 hover:border-red-300'
+                ? 'cursor-not-allowed border-forest/10 bg-white/40 text-forest/30 dark:border-slate-600 dark:bg-slate-700/40 dark:text-slate-500'
+                : 'border-red-200/70 bg-white/70 text-red-500 hover:bg-red-50 hover:border-red-300 dark:border-red-800/60 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50 dark:hover:border-red-700'
             }`}
             title="Device will clear its WiFi config and restart in AP mode"
           >
@@ -93,12 +93,12 @@ export function DeviceStatusBar({
           </button>
         </div>
 
-        <Link to="/overview" className="rounded-xl border border-forest/10 bg-white/70 px-2.5 py-2 text-xs font-medium text-forest-500 transition hover:bg-white hover:text-forest">
+        <Link to="/overview" className="rounded-xl border border-forest/10 bg-white/70 px-2.5 py-2 text-xs font-medium text-forest-500 transition hover:bg-white hover:text-forest dark:border-slate-600 dark:bg-slate-700/60 dark:text-slate-300 dark:hover:bg-slate-600 dark:hover:text-white">
           All devices
         </Link>
 
         {/* Status badge */}
-        <div className="flex items-center gap-2 rounded-full bg-white/50 px-3 py-1.5">
+        <div className="flex items-center gap-2 rounded-full bg-white/50 px-3 py-1.5 dark:bg-slate-700/70 dark:border dark:border-slate-600/50">
           <span className="relative flex h-2 w-2" aria-hidden="true">
             {statusMeta.pulse && (
               <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-70 ${statusMeta.dotColor}`} />
@@ -110,37 +110,37 @@ export function DeviceStatusBar({
       </div>
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        <p className={`text-xs ${statusMeta.color} opacity-75`}>{statusDescription}</p>
+        <p className={`text-xs ${statusMeta.color} ${statusMeta.darkColor} opacity-90`}>{statusDescription}</p>
         {readings?.wifiSSID && (
-          <p className="text-xs text-forest-400">
+          <p className="text-xs text-forest-400 dark:text-slate-400">
             {deviceStatus === 'live' ? 'WiFi: ' : 'Last WiFi: '}
-            <span className="font-medium text-forest-500">{readings.wifiSSID}</span>
+            <span className="font-medium text-forest-500 dark:text-slate-300">{readings.wifiSSID}</span>
             {readings.wifiRSSI != null && deviceStatus === 'live' && (
-              <span className="ml-1 opacity-60">({readings.wifiRSSI} dBm)</span>
+              <span className="ml-1 opacity-70 dark:opacity-80">({readings.wifiRSSI} dBm)</span>
             )}
           </p>
         )}
         {lastUpdated && deviceStatus === 'live' && (
-          <p className="text-xs text-forest/30">Updated {lastUpdated}</p>
+          <p className="text-xs text-forest/30 dark:text-slate-500">Updated {lastUpdated}</p>
         )}
       </div>
 
       {/* Edit device name/room modal */}
       {editOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest/25 p-4 backdrop-blur-md" role="dialog" aria-modal="true" aria-labelledby="edit-device-title" onClick={() => setEditOpen(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-forest/25 dark:bg-black/50 p-4 backdrop-blur-md" role="dialog" aria-modal="true" aria-labelledby="edit-device-title" onClick={() => setEditOpen(false)}>
           <motion.div
             initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="w-full max-w-sm rounded-2xl border border-forest/10 bg-white p-5 shadow-modal"
+            className="w-full max-w-sm rounded-2xl border border-forest/10 bg-white p-5 shadow-modal dark:border-slate-600 dark:bg-slate-800"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 id="edit-device-title" className="mb-4 text-sm font-semibold uppercase tracking-wider text-forest/60">Edit device</h2>
-            <p className="mb-3 font-mono text-xs text-forest/40">{selectedMac}</p>
-            <label className="block text-xs font-medium text-forest-600">
+            <h2 id="edit-device-title" className="mb-4 text-sm font-semibold uppercase tracking-wider text-forest/60 dark:text-slate-300">Edit device</h2>
+            <p className="mb-3 font-mono text-xs text-forest/40 dark:text-slate-400">{selectedMac}</p>
+            <label className="block text-xs font-medium text-forest-600 dark:text-slate-400">
               Name
               <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="e.g. Monstera by window" className="mt-1 w-full input-field" />
             </label>
-            <label className="mt-3 block text-xs font-medium text-forest-600">
+            <label className="mt-3 block text-xs font-medium text-forest-600 dark:text-slate-400">
               Room
               <input type="text" value={editRoom} onChange={(e) => setEditRoom(e.target.value)} placeholder="e.g. Living room" className="mt-1 w-full input-field" />
             </label>

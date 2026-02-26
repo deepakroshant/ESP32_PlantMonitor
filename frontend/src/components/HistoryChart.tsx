@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { ref, query, orderByKey, limitToLast, onValue } from 'firebase/database'
 import { firebaseDb } from '../lib/firebase'
+import { useTheme } from '../context/ThemeContext'
 import {
   ResponsiveContainer,
   LineChart,
@@ -41,6 +42,8 @@ function formatTime(epoch: number): string {
 }
 
 export function HistoryChart({ deviceMac }: { deviceMac: string }) {
+  const { resolvedTheme } = useTheme()
+  const isDark = resolvedTheme === 'dark'
   const [raw, setRaw] = useState<HistoryEntry[]>([])
   const [rangeIdx, setRangeIdx] = useState(2)
   const [loading, setLoading] = useState(true)
@@ -190,54 +193,55 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
       ) : (
         <ResponsiveContainer width="100%" height={280}>
           <LineChart data={data} margin={{ top: 8, right: showPressureAxis ? 60 : 12, bottom: 4, left: -8 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(20,51,42,0.06)" />
+            <CartesianGrid strokeDasharray="3 3" stroke={isDark ? 'rgba(148,163,184,0.2)' : 'rgba(20,51,42,0.06)'} />
             <XAxis
               dataKey="time"
               tickFormatter={formatTime}
-              tick={{ fontSize: 11, fill: 'rgba(20,51,42,0.4)' }}
-              axisLine={{ stroke: 'rgba(20,51,42,0.08)' }}
+              tick={{ fontSize: 11, fill: isDark ? 'rgba(203,213,225,0.9)' : 'rgba(20,51,42,0.4)' }}
+              axisLine={{ stroke: isDark ? 'rgba(148,163,184,0.3)' : 'rgba(20,51,42,0.08)' }}
               tickLine={false}
               minTickGap={40}
             />
             <YAxis
               yAxisId="temp"
               orientation="left"
-              tick={{ fontSize: 11, fill: 'rgba(20,51,42,0.4)' }}
+              tick={{ fontSize: 11, fill: isDark ? 'rgba(203,213,225,0.9)' : 'rgba(20,51,42,0.4)' }}
               axisLine={false}
               tickLine={false}
               width={40}
-              label={{ value: '°C', position: 'insideTopLeft', offset: 0, style: { fontSize: 10, fill: 'rgba(20,51,42,0.35)' } }}
+              label={{ value: '°C', position: 'insideTopLeft', offset: 0, style: { fontSize: 10, fill: isDark ? 'rgba(203,213,225,0.8)' : 'rgba(20,51,42,0.35)' } }}
             />
             <YAxis
               yAxisId="soil"
               orientation="right"
-              tick={{ fontSize: 11, fill: 'rgba(20,51,42,0.4)' }}
+              tick={{ fontSize: 11, fill: isDark ? 'rgba(203,213,225,0.9)' : 'rgba(20,51,42,0.4)' }}
               axisLine={false}
               tickLine={false}
               width={48}
-              label={{ value: 'Soil raw', position: 'insideTopRight', offset: 0, style: { fontSize: 10, fill: 'rgba(20,51,42,0.35)' } }}
+              label={{ value: 'Soil raw', position: 'insideTopRight', offset: 0, style: { fontSize: 10, fill: isDark ? 'rgba(203,213,225,0.8)' : 'rgba(20,51,42,0.35)' } }}
             />
             {showPressureAxis && (
               <YAxis
                 yAxisId="pressure"
                 orientation="right"
-                tick={{ fontSize: 10, fill: 'rgba(99,102,241,0.5)' }}
+                tick={{ fontSize: 10, fill: isDark ? 'rgba(129,140,248,0.9)' : 'rgba(99,102,241,0.5)' }}
                 axisLine={false}
                 tickLine={false}
                 width={50}
                 domain={['dataMin - 2', 'dataMax + 2']}
-                label={{ value: 'hPa', position: 'insideTopRight', offset: 8, style: { fontSize: 10, fill: 'rgba(99,102,241,0.45)' } }}
+                label={{ value: 'hPa', position: 'insideTopRight', offset: 8, style: { fontSize: 10, fill: isDark ? 'rgba(129,140,248,0.85)' : 'rgba(99,102,241,0.45)' } }}
               />
             )}
             <Tooltip
               contentStyle={{
-                background: 'rgba(255,255,255,0.94)',
+                background: isDark ? 'rgba(30,41,59,0.98)' : 'rgba(255,255,255,0.94)',
                 backdropFilter: 'blur(12px)',
                 WebkitBackdropFilter: 'blur(12px)',
-                border: '1px solid rgba(27,47,39,0.07)',
+                border: isDark ? '1px solid rgba(71,85,105,0.5)' : '1px solid rgba(27,47,39,0.07)',
                 borderRadius: 14,
                 fontSize: 12,
-                boxShadow: '0 4px 16px rgba(27,47,39,0.08), 0 1px 3px rgba(27,47,39,0.04)',
+                color: isDark ? '#e2e8e5' : undefined,
+                boxShadow: isDark ? '0 4px 16px rgba(0,0,0,0.3)' : '0 4px 16px rgba(27,47,39,0.08), 0 1px 3px rgba(27,47,39,0.04)',
               }}
               labelFormatter={(v) => formatTime(v as number)}
               formatter={(value?: number | string, name?: string) => {
@@ -251,6 +255,9 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
             <Legend
               wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
               formatter={(v: string) => SERIES_META[v as SeriesKey]?.label ?? v}
+              iconType="circle"
+              iconSize={8}
+              style={isDark ? { color: 'rgba(203,213,225,0.9)' } : undefined}
             />
 
             {visibleSeries.temperature && (
