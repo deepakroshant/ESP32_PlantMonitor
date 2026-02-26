@@ -1,0 +1,25 @@
+{
+  "name": "Smart Plant Pro",
+  "short_name": "Plant Pro",
+  "description": "Monitor your plants with real-time sensors and smart watering",
+  "theme_color": "#3B7A57",
+  "background_color": "#FAFBFA",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "start_url": "/",
+  "icons": [
+    {
+      "src": "/plant-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/plant-icon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

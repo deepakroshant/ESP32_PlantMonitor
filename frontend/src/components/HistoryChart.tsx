@@ -137,7 +137,7 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
     <div className="section-card mt-3">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <p className="stat-label">Readings history</p>
-        <div className="flex gap-0.5 rounded-xl bg-surface p-1 shadow-inner">
+        <div className="flex gap-0.5 rounded-xl bg-surface p-1 shadow-inner dark:bg-forest-800/50">
           {RANGES.map((r, i) => (
             <button
               key={r.label}
@@ -145,8 +145,8 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
               onClick={() => setRangeIdx(i)}
               className={`rounded-lg px-3 py-1 text-xs font-medium transition-all ${
                 i === rangeIdx
-                  ? 'bg-white text-forest shadow-soft'
-                  : 'text-forest/35 hover:text-forest/60'
+                  ? 'bg-white text-forest shadow-soft dark:bg-forest-700 dark:text-forest-100'
+                  : 'text-forest/35 hover:text-forest/60 dark:text-forest-500 dark:hover:text-forest-300'
               }`}
             >
               {r.label}
@@ -168,8 +168,8 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
                 onClick={() => toggleSeries(key)}
                 className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-all ${
                   active
-                    ? 'border-forest/10 bg-white text-forest shadow-soft'
-                    : 'border-transparent text-forest/30 hover:text-forest/50'
+                    ? 'border-forest/10 bg-white text-forest shadow-soft dark:border-forest/20 dark:bg-forest-700 dark:text-forest-100'
+                    : 'border-transparent text-forest/30 hover:text-forest/50 dark:text-forest-500 dark:hover:text-forest-400'
                 }`}
               >
                 <span

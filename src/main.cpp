@@ -265,9 +265,23 @@ void setup() {
   wm.setWiFiAPChannel(1);
   wm.setConnectRetries(1);
   wm.setConnectTimeout(5);
-  wm.setSaveConnectTimeout(10);
+  wm.setSaveConnectTimeout(6);  // Faster redirect after WiFi save
   wm.setConfigPortalTimeout(0);
   wm.setCaptivePortalEnable(true);
+
+  // Fast captive portal redirect: respond immediately to device hotspot checks
+  // instead of falling through to "request handler not found" and slow retries.
+  wm.setWebServerCallback([]() {
+    auto redirectToPortal = []() {
+      wm.server->sendHeader("Location", "http://192.168.4.1/");
+      wm.server->send(302, "text/plain", "");
+    };
+    wm.server->on("/generate_204", HTTP_GET, redirectToPortal);
+    wm.server->on("/hotspot-detect.html", HTTP_GET, redirectToPortal);
+    wm.server->on("/success", HTTP_GET, redirectToPortal);
+    wm.server->on("/ncsi.txt", HTTP_GET, redirectToPortal);
+    wm.server->on("/connecttest.txt", HTTP_GET, redirectToPortal);
+  });
 
   if (!wm.autoConnect("SmartPlantPro")) {
     Serial.println("WiFiManager failed to connect, restarting...");
@@ -297,11 +311,11 @@ void setup() {
 
   // Sync real-time clock via NTP so timestamps are Unix epoch, not uptime
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-  Serial.print("Waiting for NTP time sync");
+  Serial.print("Waiting for NTP");
   time_t now = time(nullptr);
   int ntpRetries = 0;
-  while (now < 1000000000L && ntpRetries < 40) {
-    delay(250);
+  while (now < 1000000000L && ntpRetries < 20) {
+    delay(200);
     now = time(nullptr);
     ntpRetries++;
     Serial.print('.');
@@ -327,17 +341,16 @@ void setup() {
   Firebase.begin(&fbConfig, &fbAuth);
   Firebase.reconnectWiFi(true);
 
-  // Wait briefly for Firebase auth/token to be ready so that
-  // the initial stream connection does not immediately fail.
+  // Wait for Firebase auth/token so the initial stream connection succeeds.
   Serial.print("Waiting for Firebase auth");
   unsigned long fbStart = millis();
-  while (!Firebase.ready() && (millis() - fbStart) < 15000) {
+  while (!Firebase.ready() && (millis() - fbStart) < 10000) {
     Serial.print('.');
-    delay(250);
+    delay(200);
   }
   Serial.println();
   if (!Firebase.ready()) {
-    Serial.println("Firebase not ready after 15s. Check API key, DB_URL, email and password.");
+    Serial.println("Firebase not ready after 10s. Check API key, DB_URL, email and password.");
   } else {
     Serial.println("Firebase is ready.");
   }

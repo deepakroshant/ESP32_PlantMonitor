@@ -61,7 +61,7 @@ export function DeviceStatusBar({
           <select
             value={selectedMac}
             onChange={(e) => onSelectMac(e.target.value)}
-            className="rounded-xl border border-forest/10 bg-white/85 px-3 py-2 text-xs text-forest shadow-soft focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/15 sm:text-sm"
+            className="rounded-xl border border-forest/10 bg-white/85 px-3 py-2 text-xs text-forest shadow-soft focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/15 sm:text-sm dark:border-forest/20 dark:bg-forest-800/60 dark:text-forest-200"
             aria-label="Select device"
           >
             {devices.map((mac) => (
@@ -71,7 +71,7 @@ export function DeviceStatusBar({
           <button
             type="button"
             onClick={openEdit}
-            className="rounded-xl border border-forest/10 bg-white/70 px-2.5 py-2 text-forest/50 transition hover:bg-white hover:text-forest"
+            className="rounded-xl border border-forest/10 bg-white/70 px-2.5 py-2 text-forest/50 transition hover:bg-white hover:text-forest dark:border-forest/20 dark:bg-forest-800/40 dark:text-forest-400 dark:hover:bg-forest-700/60 dark:hover:text-forest"
             aria-label="Edit device name"
             title="Edit device name and room"
           >

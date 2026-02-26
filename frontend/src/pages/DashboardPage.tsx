@@ -10,6 +10,7 @@ import { getDeviceStatus, STATUS_META, formatSecondsAgo } from '../utils/deviceS
 import type { Readings, PlantProfile, DeviceStatus, DeviceMeta, WateringSchedule } from '../types'
 import { LogoutIcon } from '../components/icons/LogoutIcon'
 import { PlusIcon } from '../components/icons/PlusIcon'
+import { ThemeToggleIcon } from '../components/icons/ThemeToggleIcon'
 import { PlantIcon } from '../components/icons/PlantIcon'
 import { PencilIcon } from '../components/icons/PencilIcon'
 import { HistoryChart } from '../components/HistoryChart'
@@ -508,6 +509,7 @@ export function DashboardPage() {
             <h1 className="font-display text-lg font-bold tracking-tight text-forest sm:text-xl">Smart Plant Pro</h1>
           </div>
           <div className="flex items-center gap-2">
+            <ThemeToggleIcon />
             {user && (
               <div className="hidden items-center gap-2 rounded-xl border border-forest/5 bg-surface px-3 py-1.5 sm:flex">
                 <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
@@ -760,42 +762,92 @@ export function DashboardPage() {
                 </CollapsibleSection>
 
                 <CollapsibleSection title="Device diagnostics" subtitle={diagnostics ? `Uptime ${diagnostics.uptimeSec != null ? `${Math.floor((diagnostics.uptimeSec ?? 0) / 60)}m` : '—'}` : 'Waiting…'}>
-                  <p className="mb-4 text-sm text-forest-400">Firmware-reported stats for troubleshooting.</p>
+                  <p className="mb-4 text-sm text-forest-400 dark:text-forest-300">Firmware-reported stats for troubleshooting.</p>
                   {diagnostics ? (
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                      {diagnostics.uptimeSec != null && (
-                        <div className="rounded-xl border border-forest/8 bg-surface/60 px-3 py-2">
-                          <p className="text-xs text-forest-400">Uptime</p>
-                          <p className="font-mono text-sm font-semibold text-forest">{Math.floor(diagnostics.uptimeSec / 60)} min</p>
-                        </div>
-                      )}
-                      {diagnostics.lastSyncAt != null && (
-                        <div className="rounded-xl border border-forest/8 bg-surface/60 px-3 py-2">
-                          <p className="text-xs text-forest-400">Last sync</p>
-                          <p className="font-mono text-sm font-semibold text-forest">{new Date(diagnostics.lastSyncAt * 1000).toLocaleTimeString()}</p>
-                        </div>
-                      )}
-                      {diagnostics.syncSuccessCount != null && (
-                        <div className="rounded-xl border border-forest/8 bg-surface/60 px-3 py-2">
-                          <p className="text-xs text-forest-400">Sync OK</p>
-                          <p className="font-mono text-sm font-semibold text-forest">{diagnostics.syncSuccessCount}</p>
-                        </div>
-                      )}
-                      {diagnostics.syncFailCount != null && diagnostics.syncFailCount > 0 && (
-                        <div className="rounded-xl border border-amber-200/60 bg-amber-50/60 px-3 py-2">
-                          <p className="text-xs text-amber-600">Sync fails</p>
-                          <p className="font-mono text-sm font-semibold text-amber-700">{diagnostics.syncFailCount}</p>
-                        </div>
-                      )}
-                      {diagnostics.wifiRSSI != null && (
-                        <div className="rounded-xl border border-forest/8 bg-surface/60 px-3 py-2">
-                          <p className="text-xs text-forest-400">WiFi RSSI</p>
-                          <p className="font-mono text-sm font-semibold text-forest">{diagnostics.wifiRSSI} dBm</p>
-                        </div>
-                      )}
+                    <div className="overflow-hidden rounded-xl border border-forest/10 dark:border-forest/20">
+                      <table className="w-full text-sm" role="grid">
+                        <thead>
+                          <tr className="border-b border-forest/10 bg-surface/80 dark:border-forest/20 dark:bg-forest-800/50">
+                            <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-forest/50 dark:text-forest-400">Metric</th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-forest/50 dark:text-forest-400">Value</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-forest/5 dark:divide-forest/15">
+                          {diagnostics.uptimeSec != null && (
+                            <tr className="hover:bg-forest/[0.02] dark:hover:bg-forest-800/30">
+                              <td className="px-4 py-2.5 text-forest-500 dark:text-forest-400">Uptime</td>
+                              <td className="px-4 py-2.5 text-right font-mono font-semibold text-forest dark:text-forest-200">{Math.floor(diagnostics.uptimeSec / 60)} min</td>
+                            </tr>
+                          )}
+                          {diagnostics.lastSyncAt != null && (
+                            <tr className="hover:bg-forest/[0.02] dark:hover:bg-forest-800/30">
+                              <td className="px-4 py-2.5 text-forest-500 dark:text-forest-400">Last sync</td>
+                              <td className="px-4 py-2.5 text-right font-mono font-semibold text-forest dark:text-forest-200">{new Date(diagnostics.lastSyncAt * 1000).toLocaleTimeString()}</td>
+                            </tr>
+                          )}
+                          {diagnostics.syncSuccessCount != null && (
+                            <tr className="hover:bg-forest/[0.02] dark:hover:bg-forest-800/30">
+                              <td className="px-4 py-2.5 text-forest-500 dark:text-forest-400">Sync success</td>
+                              <td className="px-4 py-2.5 text-right font-mono font-semibold text-green-600 dark:text-green-400">{diagnostics.syncSuccessCount}</td>
+                            </tr>
+                          )}
+                          {diagnostics.syncFailCount != null && diagnostics.syncFailCount > 0 && (
+                            <tr className="hover:bg-amber-50/50 dark:hover:bg-amber-900/20">
+                              <td className="px-4 py-2.5 text-amber-600 dark:text-amber-400">Sync fails</td>
+                              <td className="px-4 py-2.5 text-right font-mono font-semibold text-amber-700 dark:text-amber-400">{diagnostics.syncFailCount}</td>
+                            </tr>
+                          )}
+                          {diagnostics.wifiRSSI != null && (
+                            <tr className="hover:bg-forest/[0.02] dark:hover:bg-forest-800/30">
+                              <td className="px-4 py-2.5 text-forest-500 dark:text-forest-400">WiFi RSSI</td>
+                              <td className="px-4 py-2.5 text-right font-mono font-semibold text-forest dark:text-forest-200">{diagnostics.wifiRSSI} dBm</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
                     </div>
                   ) : (
-                    <p className="text-xs text-forest/35">No diagnostics data yet. Device may be offline or firmware is older.</p>
+                    <p className="text-xs text-forest/35 dark:text-forest-500">No diagnostics data yet. Device may be offline or firmware is older.</p>
+                  )}
+                </CollapsibleSection>
+
+                <CollapsibleSection title="Watering log" subtitle={waterLog.length > 0 ? `${waterLog.length} event${waterLog.length !== 1 ? 's' : ''}` : 'No events yet'}>
+                  <p className="mb-4 text-sm text-forest-400 dark:text-forest-300">Recent watering events from pump control.</p>
+                  {waterLog.length > 0 ? (
+                    <div className="overflow-x-auto -mx-1">
+                      <table className="w-full min-w-[420px] text-sm" role="grid">
+                        <thead>
+                          <tr className="border-b border-forest/10 dark:border-forest/20">
+                            <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-forest/50 dark:text-forest-400">Date & time</th>
+                            <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-forest/50 dark:text-forest-400">Reason</th>
+                            <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-forest/50 dark:text-forest-400">Duration</th>
+                            <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-forest/50 dark:text-forest-400">Soil before</th>
+                            <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-forest/50 dark:text-forest-400">Soil after</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-forest/5 dark:divide-forest/15">
+                          {[...waterLog].reverse().map((e) => (
+                            <tr key={e.epoch} className="hover:bg-forest/[0.02] dark:hover:bg-forest-800/30">
+                              <td className="px-3 py-2 font-medium text-forest dark:text-forest-200">
+                                {new Date(e.epoch * 1000).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                              </td>
+                              <td className="px-3 py-2">
+                                <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                                  e.reason === 'schedule' ? 'bg-primary/15 text-primary dark:bg-primary/25 dark:text-primary-300' : 'bg-forest/10 text-forest-500 dark:bg-forest-700 dark:text-forest-400'
+                                }`}>
+                                  {e.reason === 'schedule' ? 'Schedule' : 'Manual'}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-right font-mono text-forest-600 dark:text-forest-300">{(e.durationMs / 1000).toFixed(1)}s</td>
+                              <td className="px-3 py-2 text-right font-mono text-forest-600 dark:text-forest-300">{e.soilBefore}</td>
+                              <td className="px-3 py-2 text-right font-mono font-medium text-primary dark:text-primary-300">{e.soilAfter}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-forest/35 dark:text-forest-500">No watering events recorded yet. Use &quot;Water now&quot; or enable the schedule.</p>
                   )}
                 </CollapsibleSection>
               </div>
