@@ -18,7 +18,7 @@ export function StatusBanners({ deviceStatus, showSyncedBanner, lastSeenLabel }:
   return (
     <AnimatePresence mode="popLayout">
       {showSyncedBanner && (
-        <motion.div key="synced" {...bannerMotion} className="mb-4 flex items-center gap-3 rounded-2xl border border-primary/25 bg-primary/8 px-4 py-3">
+        <motion.div key="synced" {...bannerMotion} className="mb-2 flex items-center gap-2 rounded-xl border border-primary/25 bg-primary/8 px-3 py-2">
           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15">
             <svg className="h-3.5 w-3.5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -29,7 +29,7 @@ export function StatusBanners({ deviceStatus, showSyncedBanner, lastSeenLabel }:
       )}
 
       {deviceStatus === 'wifi_connected' && (
-        <motion.div key="wifi" {...bannerMotion} className="mb-4 flex items-center gap-3 rounded-2xl border border-amber-200/50 bg-amber-50/70 px-4 py-3.5">
+        <motion.div key="wifi" {...bannerMotion} className="mb-2 flex items-center gap-2 rounded-xl border border-amber-200/50 bg-amber-50/70 px-3 py-2.5">
           <span className="relative flex h-2.5 w-2.5 shrink-0">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400/50" />
             <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500" />
@@ -42,7 +42,7 @@ export function StatusBanners({ deviceStatus, showSyncedBanner, lastSeenLabel }:
       )}
 
       {deviceStatus === 'delayed' && (
-        <motion.div key="delayed" {...bannerMotion} className="mb-4 flex items-center gap-3 rounded-2xl border border-amber-200/40 bg-amber-50/60 px-4 py-3">
+        <motion.div key="delayed" {...bannerMotion} className="mb-2 flex items-center gap-2 rounded-xl border border-amber-200/40 bg-amber-50/60 px-3 py-2">
           <svg className="h-4 w-4 shrink-0 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
           </svg>
@@ -51,7 +51,7 @@ export function StatusBanners({ deviceStatus, showSyncedBanner, lastSeenLabel }:
       )}
 
       {deviceStatus === 'offline' && (
-        <motion.div key="offline" {...bannerMotion} className="mb-4 rounded-2xl border border-red-200/50 bg-red-50/70 px-4 py-4">
+        <motion.div key="offline" {...bannerMotion} className="mb-2 rounded-xl border border-red-200/50 bg-red-50/70 px-3 py-3">
           <div className="flex items-start gap-3">
             <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-100">
               <svg className="h-4 w-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

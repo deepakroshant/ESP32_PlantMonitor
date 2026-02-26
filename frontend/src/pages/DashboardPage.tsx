@@ -16,7 +16,7 @@ import { DeviceStatusBar } from '../components/dashboard/DeviceStatusBar'
 import { StatusBanners } from '../components/dashboard/StatusBanners'
 import { PlantHero } from '../components/dashboard/PlantHero'
 import { SensorGrid } from '../components/dashboard/SensorGrid'
-import { fadeSlideUp, fadeScale, orchestratedStagger, cardItem, scrollReveal } from '../lib/motion'
+import { fadeSlideUp, fadeScale } from '../lib/motion'
 import { CollapsibleSection } from '../components/CollapsibleSection'
 
 const EXAMPLE_PLANTS = [
@@ -420,118 +420,82 @@ export function DashboardPage() {
             {!isResetGuide && (<>
               <StatusBanners deviceStatus={deviceStatus} showSyncedBanner={showSyncedBanner} lastSeenLabel={lastSeenLabel} />
 
-              {/* ── Orchestrated entrance: hero → alerts → sensors sequence ── */}
-              <motion.div
-                variants={orchestratedStagger}
-                initial="hidden"
-                animate="visible"
-                className="space-y-0"
-              >
-                <motion.div variants={cardItem}>
-                  <PlantHero
-                    selectedMac={selectedMac}
-                    plantName={currentPlant?.name ?? 'Your plant'}
-                    plantType={currentPlant?.type ?? ''}
-                    deviceStatus={deviceStatus}
-                    dataUntrusted={dataUntrusted}
-                    isDelayed={isDelayed}
-                    health={readings?.health}
-                    healthOk={healthOk}
-                    onEditPlant={() => openEditPlant(linkedProfileId)}
-                  />
-                </motion.div>
+              <PlantHero
+                selectedMac={selectedMac}
+                plantName={currentPlant?.name ?? 'Your plant'}
+                plantType={currentPlant?.type ?? ''}
+                deviceStatus={deviceStatus}
+                dataUntrusted={dataUntrusted}
+                isDelayed={isDelayed}
+                health={readings?.health}
+                healthOk={healthOk}
+                onEditPlant={() => openEditPlant(linkedProfileId)}
+                readings={readings}
+              />
 
-                {/* Alert + notification toggle */}
-                <motion.div variants={cardItem} className="mb-5 space-y-3">
-                  {lastAlert && (
-                    <div className="flex items-start gap-3 rounded-2xl border border-terracotta/18 bg-red-50/70 px-4 py-3.5">
-                      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-terracotta/12">
-                        <svg className="h-3.5 w-3.5 text-terracotta" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 15.75h.008" /></svg>
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-forest">{lastAlert.message}</p>
-                        {lastAlert.timestamp > 0 && <p className="mt-0.5 text-xs text-forest/40">{new Date(lastAlert.timestamp * 1000).toLocaleString()}</p>}
-                      </div>
-                      <button type="button" onClick={handleAckAlert} className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium text-terracotta transition hover:bg-terracotta/10">Dismiss</button>
+              {/* Alert + notification toggle */}
+              <div className="mb-3 space-y-2">
+                {lastAlert && (
+                  <motion.div variants={fadeSlideUp} initial="hidden" animate="visible" className="flex items-start gap-3 rounded-2xl border border-terracotta/18 bg-red-50/70 px-4 py-3">
+                    <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-terracotta/12">
+                      <svg className="h-3 w-3 text-terracotta" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 15.75h.008" /></svg>
                     </div>
-                  )}
-                  <div className="flex items-center gap-3 rounded-2xl border border-forest/5 bg-white/70 px-4 py-3">
-                    <svg className="h-4 w-4 shrink-0 text-forest/25" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>
-                    <span className="flex-1 text-xs text-forest-400">{'Notification' in window && Notification.permission === 'denied' ? 'Notifications blocked by browser' : 'Notify me when plant health drops'}</span>
-                    <button type="button" onClick={handleToggleNotifications} disabled={'Notification' in window && Notification.permission === 'denied'} className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${notificationsEnabled ? 'bg-primary shadow-glow' : 'bg-forest/12'} disabled:cursor-not-allowed disabled:opacity-40`} aria-label="Toggle browser notifications">
-                      <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${notificationsEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
-                    </button>
-                  </div>
-                </motion.div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-forest">{lastAlert.message}</p>
+                      {lastAlert.timestamp > 0 && <p className="mt-0.5 text-xs text-forest/40">{new Date(lastAlert.timestamp * 1000).toLocaleString()}</p>}
+                    </div>
+                    <button type="button" onClick={handleAckAlert} className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-medium text-terracotta transition hover:bg-terracotta/10">Dismiss</button>
+                  </motion.div>
+                )}
+                <div className="flex items-center gap-3 rounded-2xl border border-forest/5 bg-white/70 px-3 py-2.5">
+                  <svg className="h-3.5 w-3.5 shrink-0 text-forest/25" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" /></svg>
+                  <span className="flex-1 text-xs text-forest-400">{'Notification' in window && Notification.permission === 'denied' ? 'Notifications blocked by browser' : 'Notify me when plant health drops'}</span>
+                  <button type="button" onClick={handleToggleNotifications} disabled={'Notification' in window && Notification.permission === 'denied'} className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${notificationsEnabled ? 'bg-primary shadow-glow' : 'bg-forest/12'} disabled:cursor-not-allowed disabled:opacity-40`} aria-label="Toggle browser notifications">
+                    <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${notificationsEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                  </button>
+                </div>
+              </div>
 
-                <motion.div variants={cardItem}>
-                  <SensorGrid
-                    deviceStatus={deviceStatus}
-                    dataUntrusted={dataUntrusted}
-                    isDelayed={isDelayed}
-                    displayTemp={displayTemp}
-                    temp={temp}
-                    displayGaugePct={displayGaugePct}
-                    soilLabel={soilLabel}
-                    readings={readings}
-                    selectedMac={selectedMac}
-                  />
-                </motion.div>
-              </motion.div>
+              <SensorGrid
+                deviceStatus={deviceStatus}
+                dataUntrusted={dataUntrusted}
+                isDelayed={isDelayed}
+                displayTemp={displayTemp}
+                temp={temp}
+                displayGaugePct={displayGaugePct}
+                soilLabel={soilLabel}
+                readings={readings}
+                selectedMac={selectedMac}
+              />
 
-              {/* History chart — scroll-triggered */}
+              {/* History chart */}
               {selectedMac && !dataUntrusted && (
-                <motion.div
-                  variants={scrollReveal}
-                  initial="hidden"
-                  whileInView="visible"
-                  viewport={{ once: true, amount: 0.15 }}
-                >
-                  <HistoryChart deviceMac={selectedMac} />
-                </motion.div>
+                <HistoryChart deviceMac={selectedMac} />
               )}
 
               {/* Pump control */}
-              <motion.div
-                variants={scrollReveal}
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true, amount: 0.2 }}
-                className="mt-5 flex items-center gap-4 section-card !p-5"
-              >
+              <motion.div variants={fadeSlideUp} initial="hidden" animate="visible" className="mt-3 flex items-center gap-3 section-card !p-4">
                 <div className={`icon-pill shrink-0 transition-all duration-300 ${pumpActive ? '!bg-primary/18 ring-1 ring-primary/20' : ''}`}>
                   <svg className={`h-5 w-5 transition-colors duration-300 ${pumpActive ? 'text-primary' : 'text-forest/30'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" /></svg>
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-forest">Water pump</p>
-                  <p className="mt-0.5 text-xs text-forest-400">{pumpActive ? 'Pump is running…' : 'Send a manual watering pulse to the device.'}</p>
+                  <p className="mt-0.5 text-xs text-forest-400">{pumpActive ? 'Pump is running…' : 'Manual watering pulse'}</p>
                 </div>
-                <button type="button" onClick={handleTriggerPump} disabled={pumpCooldown || dataUntrusted} className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all ${pumpActive ? 'bg-primary/12 text-primary ring-1 ring-primary/20' : pumpCooldown ? 'bg-forest/5 text-forest/30' : 'btn-primary !rounded-xl'} disabled:opacity-50`}>
+                <button type="button" onClick={handleTriggerPump} disabled={pumpCooldown || dataUntrusted} className={`shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all ${pumpActive ? 'bg-primary/12 text-primary ring-1 ring-primary/20' : pumpCooldown ? 'bg-forest/5 text-forest/30' : 'btn-primary !rounded-xl'} disabled:opacity-50`}>
                   {pumpActive ? 'Running…' : pumpCooldown ? 'Sent ✓' : 'Water now'}
                 </button>
               </motion.div>
 
               {showProTip && (
-                <motion.div
-                  variants={scrollReveal}
-                  initial="hidden"
-                  whileInView="visible"
-                  viewport={{ once: true }}
-                  className="mt-5 rounded-2xl border border-amber-200/50 bg-amber-50/60 p-4"
-                >
+                <div className="mt-3 rounded-2xl border border-amber-200/50 bg-amber-50/60 p-3">
                   <p className="text-sm font-semibold text-amber-700">Pro tip</p>
-                  <p className="mt-1 text-sm text-forest-500">Temperature is above 28 °C. Consider lowering the target moisture threshold so the plant doesn't get overwatered in the heat.</p>
-                </motion.div>
+                  <p className="mt-1 text-sm text-forest-500">Temperature is above 28 °C. Consider lowering the target moisture threshold.</p>
+                </div>
               )}
 
-              {/* ── Collapsible settings (Animate-UI accordion style) ── */}
-              <motion.div
-                variants={scrollReveal}
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true, amount: 0.1 }}
-                className="mt-6 space-y-3"
-              >
+              {/* ── Collapsible settings ── */}
+              <div className="mt-4 space-y-2.5">
                 <CollapsibleSection title="Target moisture" subtitle={`Current: ${targetSoil}`} defaultOpen>
                   <p className="mb-4 text-sm text-forest-400">Soil raw below this value = "wet enough". Drag to set.</p>
                   <div className="flex flex-wrap items-center gap-4">
@@ -587,7 +551,7 @@ export function DashboardPage() {
                     </ul>
                   )}
                 </CollapsibleSection>
-              </motion.div>
+              </div>
             </>)}
           </>
         )}
@@ -622,27 +586,21 @@ export function DashboardPage() {
           </div>
         )}
 
-        {/* Invite section — collapsible, scroll-triggered */}
-        <motion.div
-          variants={scrollReveal}
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, amount: 0.15 }}
-          className="mt-8 mb-8"
-        >
+        {/* Invite section */}
+        <div className="mt-4 mb-6">
           <CollapsibleSection title="Invite user" subtitle={invitedList.length > 0 ? `${invitedList.length} invited` : 'Share access'}>
-            <p className="mb-4 text-sm text-forest-400">Share the app link. New users sign up with email and password, then can claim their own devices.</p>
-            <div className="mb-3 flex flex-wrap items-center gap-2">
+            <p className="mb-3 text-sm text-forest-400">Share the app link. New users sign up with email and password, then can claim their own devices.</p>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
               <input type="text" readOnly value={appUrl} className="min-w-0 flex-1 input-field font-mono !text-xs" />
               <button type="button" onClick={handleCopyUrl} className="btn-ghost">{copyOk ? '✓ Copied' : 'Copy link'}</button>
             </div>
-            <form onSubmit={handleInvite} className="mb-3 flex flex-wrap items-center gap-2">
+            <form onSubmit={handleInvite} className="mb-2 flex flex-wrap items-center gap-2">
               <input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="Email to add to invite list" className="input-field" />
               <button type="submit" className="btn-primary">Invite</button>
             </form>
             {invitedList.length > 0 && <p className="text-xs text-forest/40">Invited: {invitedList.join(', ')}</p>}
           </CollapsibleSection>
-        </motion.div>
+        </div>
       </div>
     </div>
   )

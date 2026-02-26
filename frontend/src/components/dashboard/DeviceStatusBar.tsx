@@ -26,10 +26,10 @@ export function DeviceStatusBar({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={spring.gentle}
-      className={`mb-5 rounded-3xl border ${meta.border} ${meta.bg} p-4 transition-colors duration-500 sm:p-5`}
+      className={`mb-3 rounded-2xl border ${meta.border} ${meta.bg} p-3 transition-colors duration-500 sm:p-4`}
       style={{ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
     >
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         {/* Device selector + reset */}
         <div className="flex items-center gap-2">
           <select

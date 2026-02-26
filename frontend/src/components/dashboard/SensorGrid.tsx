@@ -80,15 +80,16 @@ export function SensorGrid({
   const gridOpacity = dataUntrusted ? 0.32 : isDelayed ? 0.68 : 1
 
   return (
-    <div className="relative mb-5">
+    <div className="relative">
       {dataUntrusted && <FrozenOverlay deviceStatus={deviceStatus} />}
 
       <motion.div
         key={`gauges-${selectedMac}`}
         variants={staggerContainer}
         initial="hidden"
-        animate={{ ...{ opacity: gridOpacity, y: 0 }, transition: { staggerChildren: 0.07 } }}
-        className={`grid grid-cols-1 gap-4 sm:grid-cols-2 transition-all duration-500 ${
+        animate="visible"
+        style={{ opacity: gridOpacity }}
+        className={`grid grid-cols-1 gap-3 sm:grid-cols-2 transition-all duration-500 ${
           dataUntrusted ? 'pointer-events-none select-none blur-[1px] grayscale-[50%]' : isDelayed ? 'grayscale-[20%]' : ''
         }`}
       >

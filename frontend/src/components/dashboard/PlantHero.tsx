@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import type { DeviceStatus } from '../../types'
+import type { DeviceStatus, Readings } from '../../types'
 import { PlantIcon } from '../icons/PlantIcon'
 import { PencilIcon } from '../icons/PencilIcon'
 import { spring } from '../../lib/motion'
@@ -14,6 +14,7 @@ type Props = {
   health: string | undefined
   healthOk: boolean
   onEditPlant: () => void
+  readings?: Readings | null
 }
 
 const statusChip: Partial<Record<DeviceStatus, { text: string; dot: string }>> = {
@@ -23,9 +24,13 @@ const statusChip: Partial<Record<DeviceStatus, { text: string; dot: string }>> =
   wifi_connected: { text: 'Syncing', dot: 'bg-amber-400' },
 }
 
+function formatPressureHpa(pa: number): string {
+  return (pa / 100).toFixed(0)
+}
+
 export function PlantHero({
   selectedMac, plantName, plantType, deviceStatus,
-  dataUntrusted, isDelayed, health, healthOk, onEditPlant,
+  dataUntrusted, isDelayed, health, healthOk, onEditPlant, readings,
 }: Props) {
   const chip = statusChip[deviceStatus]
 
@@ -37,80 +42,103 @@ export function PlantHero({
     ? { bg: 'bg-primary/10', border: 'border-primary/25', text: 'text-primary' }
     : { bg: 'bg-terracotta/10', border: 'border-terracotta/25', text: 'text-terracotta' }
 
+  const hasLiveData = !dataUntrusted && readings
+  const temp = hasLiveData && readings.temperature != null && !Number.isNaN(readings.temperature)
+    ? `${readings.temperature.toFixed(1)}°C` : null
+  const pressure = hasLiveData && readings.pressure != null && !Number.isNaN(readings.pressure)
+    ? `${formatPressureHpa(readings.pressure)} hPa` : null
+  const soil = hasLiveData && readings.soilRaw != null
+    ? `Soil ${readings.soilRaw}` : null
+  const light = hasLiveData
+    ? (readings.lightBright === true ? 'Bright' : readings.lightBright === false ? 'Dim' : null) : null
+
+  const quickStats = [temp, soil, pressure, light].filter(Boolean)
+
   return (
     <motion.div
       key={selectedMac}
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={spring.gentle}
-      whileHover={{ scale: 1.005 }}
-      className="section-card mb-5 flex items-center gap-4 !p-5 sm:gap-6 sm:!p-6"
+      className="section-card mb-3 !p-4 sm:!p-5"
     >
-      {/* Plant icon */}
-      <div
-        className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl transition-all duration-500 sm:h-16 sm:w-16 ${
-          dataUntrusted ? 'bg-forest/5' : ''
-        }`}
-        style={dataUntrusted ? {} : {
-          background: 'linear-gradient(135deg, rgba(59,122,87,0.18) 0%, rgba(59,122,87,0.08) 100%)',
-          boxShadow: '0 0 0 1px rgba(59,122,87,0.12)',
-        }}
-      >
-        <PlantIcon
-          className={`h-7 w-7 transition-colors duration-500 sm:h-8 sm:w-8 ${
-            dataUntrusted ? 'text-forest/25' : 'text-primary'
+      <div className="flex items-center gap-3 sm:gap-4">
+        {/* Plant icon */}
+        <div
+          className={`relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl transition-all duration-500 sm:h-14 sm:w-14 sm:rounded-2xl ${
+            dataUntrusted ? 'bg-forest/5' : ''
           }`}
-        />
-      </div>
-
-      {/* Name + type */}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <p
-            className={`font-display font-bold leading-tight transition-colors duration-300 sm:text-lg ${
-              dataUntrusted ? 'text-forest/40' : 'text-forest'
-            }`}
-            style={{ fontSize: '1.05rem' }}
-          >
-            {plantName}
-          </p>
-          <button
-            type="button"
-            onClick={onEditPlant}
-            className="rounded-full p-1 text-forest/35 transition hover:bg-sage-100 hover:text-forest"
-            aria-label="Edit plant name and type"
-          >
-            <PencilIcon className="h-3.5 w-3.5" />
-          </button>
-        </div>
-
-        <div className="mt-1 flex flex-wrap items-center gap-2">
-          {plantType && (
-            <span className="text-xs text-forest-400">{plantType}</span>
-          )}
-          {chip && !dataUntrusted && (
-            <span className="flex items-center gap-1 rounded-full bg-forest/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-forest/50">
-              <span className={`h-1.5 w-1.5 rounded-full ${chip.dot} ${deviceStatus === 'live' ? 'animate-pulse' : ''}`} />
-              {chip.text}
-            </span>
-          )}
-          {!plantType && !chip && (
-            <span className="text-xs text-forest/35">No plant type set</span>
-          )}
-        </div>
-      </div>
-
-      {/* Health badge */}
-      <div className="shrink-0 text-right">
-        <p className="mb-2 stat-label">Health</p>
-        <span
-          className={`inline-block rounded-full border px-4 py-1.5 text-sm font-semibold transition-all duration-500 sm:px-5 sm:text-base ${healthVariant.bg} ${healthVariant.border} ${healthVariant.text}`}
+          style={dataUntrusted ? {} : {
+            background: 'linear-gradient(135deg, rgba(59,122,87,0.18) 0%, rgba(59,122,87,0.08) 100%)',
+            boxShadow: '0 0 0 1px rgba(59,122,87,0.12)',
+          }}
         >
-          {dataUntrusted
-            ? (deviceStatus === 'wifi_connected' || deviceStatus === 'syncing' ? '…' : '—')
-            : (health ?? '—')}
-        </span>
+          <PlantIcon
+            className={`h-6 w-6 transition-colors duration-500 sm:h-7 sm:w-7 ${
+              dataUntrusted ? 'text-forest/25' : 'text-primary'
+            }`}
+          />
+        </div>
+
+        {/* Name + type + status */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <p
+              className={`font-display text-base font-bold leading-tight transition-colors duration-300 sm:text-lg ${
+                dataUntrusted ? 'text-forest/40' : 'text-forest'
+              }`}
+            >
+              {plantName}
+            </p>
+            <button
+              type="button"
+              onClick={onEditPlant}
+              className="rounded-full p-1 text-forest/35 transition hover:bg-sage-100 hover:text-forest"
+              aria-label="Edit plant name and type"
+            >
+              <PencilIcon className="h-3 w-3" />
+            </button>
+          </div>
+
+          <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+            {plantType && (
+              <span className="text-xs text-forest-400">{plantType}</span>
+            )}
+            {chip && !dataUntrusted && (
+              <span className="flex items-center gap-1 rounded-full bg-forest/5 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-forest/50">
+                <span className={`h-1.5 w-1.5 rounded-full ${chip.dot} ${deviceStatus === 'live' ? 'animate-pulse' : ''}`} />
+                {chip.text}
+              </span>
+            )}
+            {!plantType && !chip && (
+              <span className="text-xs text-forest/35">No plant type set</span>
+            )}
+          </div>
+        </div>
+
+        {/* Health badge */}
+        <div className="shrink-0 text-right">
+          <p className="mb-1 stat-label">Health</p>
+          <span
+            className={`inline-block rounded-full border px-3 py-1 text-sm font-semibold transition-all duration-500 sm:px-4 ${healthVariant.bg} ${healthVariant.border} ${healthVariant.text}`}
+          >
+            {dataUntrusted
+              ? (deviceStatus === 'wifi_connected' || deviceStatus === 'syncing' ? '…' : '—')
+              : (health ?? '—')}
+          </span>
+        </div>
       </div>
+
+      {/* Live quick stats */}
+      {quickStats.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2 border-t border-forest/5 pt-3">
+          {quickStats.map((s) => (
+            <span key={s} className="rounded-lg bg-forest/[0.03] px-2.5 py-1 text-xs font-medium tabular-nums text-forest-500">
+              {s}
+            </span>
+          ))}
+        </div>
+      )}
     </motion.div>
   )
 }

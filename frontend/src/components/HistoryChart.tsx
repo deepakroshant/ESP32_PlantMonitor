@@ -103,7 +103,7 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
 
   if (loading) {
     return (
-      <div className="section-card mt-5">
+      <div className="section-card mt-3">
         <p className="stat-label mb-3">Readings history</p>
         <div className="h-48 space-y-3 overflow-hidden">
           {[72, 88, 60, 80, 56].map((w, i) => (
@@ -120,7 +120,7 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
 
   if (raw.length === 0) {
     return (
-      <div className="section-card mt-5">
+      <div className="section-card mt-3">
         <p className="stat-label mb-3">Readings history</p>
         <div className="flex h-32 items-center justify-center">
           <p className="text-sm text-forest/35 text-center px-4">
@@ -134,8 +134,8 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
   const showPressureAxis = hasPressure && visibleSeries.pressure
 
   return (
-    <div className="section-card mt-5">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+    <div className="section-card mt-3">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <p className="stat-label">Readings history</p>
         <div className="flex gap-0.5 rounded-xl bg-surface p-1 shadow-inner">
           {RANGES.map((r, i) => (
