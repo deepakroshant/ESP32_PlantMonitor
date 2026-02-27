@@ -1,4 +1,4 @@
-/** Leaf/plant icon for hero section */
+/** Plant icon — stem with leaves (leaf shapes point down/out, not up like umbrella) */
 export function PlantIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -6,16 +6,19 @@ export function PlantIcon({ className }: { className?: string }) {
       fill="none"
       viewBox="0 0 24 24"
       stroke="currentColor"
-      strokeWidth={1.5}
+      strokeWidth={1.8}
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      {/* Stem */}
-      <path d="M12 20V10" />
-      {/* Left leaf */}
-      <path d="M12 10c-2.5 0-5 1.5-6 4-.4.8 0 1.6.6 2 1.5.8 3.4.2 4.6-1.2" />
+      {/* Main stem */}
+      <path d="M12 21V11" />
+      {/* Left leaf — curves down and out */}
+      <path d="M12 11c-2 1-4 2.5-4 5" />
       {/* Right leaf */}
-      <path d="M12 10c2.5 0 5 1.5 6 4 .4.8 0 1.6-.6 2-1.5.8-3.4.2-4.6-1.2" />
+      <path d="M12 11c2 1 4 2.5 4 5" />
+      {/* Top pair — small leaves at stem tip */}
+      <path d="M12 11l-2-3" />
+      <path d="M12 11l2-3" />
     </svg>
   )
 }
