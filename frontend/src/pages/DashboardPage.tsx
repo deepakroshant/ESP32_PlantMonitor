@@ -19,6 +19,8 @@ import { PlantHero } from '../components/dashboard/PlantHero'
 import { SensorGrid } from '../components/dashboard/SensorGrid'
 import { fadeSlideUp, fadeScale } from '../lib/motion'
 import { CollapsibleSection } from '../components/CollapsibleSection'
+import { BottomTabBar, type DashboardTab } from '../components/BottomTabBar'
+import { ConfirmDestructiveButton } from '../components/ConfirmDestructiveButton'
 
 const EXAMPLE_PLANTS = [
   { id: 'mint', label: 'Mint', targetSoil: 2000 },
@@ -91,6 +93,7 @@ export function DashboardPage() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(() =>
     typeof window !== 'undefined' && localStorage.getItem('notif_enabled') === 'true'
   )
+  const [activeTab, setActiveTab] = useState<DashboardTab>('dashboard')
   const lastNotifiedAtRef = useRef(0)
   const prevStatusRef = useRef<DeviceStatus>('no_data')
   const appUrl = typeof window !== 'undefined' ? window.location.origin : ''
@@ -466,6 +469,13 @@ export function DashboardPage() {
   }, [deviceStatus, resetRequestedAt])
   useEffect(() => { prevStatusRef.current = deviceStatus }, [deviceStatus])
 
+  useEffect(() => {
+    if (!editModalOpen) return
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') closeEditPlant() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [editModalOpen])
+
   const isResetGuide = resetRequestedAt > 0 && deviceStatus === 'syncing'
   const dataUntrusted = deviceStatus === 'offline' || deviceStatus === 'syncing' || deviceStatus === 'wifi_connected' || deviceStatus === 'no_data'
   const isDelayed = deviceStatus === 'delayed'
@@ -488,7 +498,7 @@ export function DashboardPage() {
 
   // ── Render ──
   return (
-    <div className="min-h-screen p-4 md:p-6 lg:p-8">
+    <div className="min-h-screen p-4 pb-28 md:p-6 md:pb-28 lg:p-8 lg:pb-28">
       <div className="mx-auto max-w-4xl">
         {/* Header */}
         <motion.header
@@ -502,7 +512,7 @@ export function DashboardPage() {
               className="flex h-9 w-9 items-center justify-center rounded-xl shadow-sm"
               style={{ background: 'linear-gradient(135deg, #4a9b6d 0%, #2f6347 65%, #1c3d2c 100%)' }}
             >
-              <PlantIcon className="h-4.5 w-4.5 text-white" />
+              <PlantIcon className="h-5 w-5 text-white" />
             </div>
             <h1 className="font-display text-lg font-bold tracking-tight text-forest dark:text-slate-100 sm:text-xl">Smart Plant Pro</h1>
           </div>
@@ -579,16 +589,20 @@ export function DashboardPage() {
               </motion.div>
             )}
 
-            {!isResetGuide && (<>
-              <StatusBanners deviceStatus={deviceStatus} showSyncedBanner={showSyncedBanner} lastSeenLabel={lastSeenLabel} />
+            {!isResetGuide && (
+              <>
+                {activeTab === 'dashboard' && (
+                  <>
+                    <StatusBanners deviceStatus={deviceStatus} showSyncedBanner={showSyncedBanner} lastSeenLabel={lastSeenLabel} />
 
-              <PlantHero
+                    <PlantHero
                 selectedMac={selectedMac}
                 plantName={currentPlant?.name ?? 'Your plant'}
                 plantType={currentPlant?.type ?? ''}
                 deviceStatus={deviceStatus}
                 dataUntrusted={dataUntrusted}
                 isDelayed={isDelayed}
+                isLoading={readings === null && !!selectedMac}
                 health={readings?.health}
                 healthOk={healthOk}
                 onEditPlant={() => openEditPlant(linkedProfileId)}
@@ -632,6 +646,7 @@ export function DashboardPage() {
                 deviceStatus={deviceStatus}
                 dataUntrusted={dataUntrusted}
                 isDelayed={isDelayed}
+                isLoading={readings === null && !!selectedMac}
                 displayTemp={displayTemp}
                 temp={temp}
                 displayGaugePct={displayGaugePct}
@@ -665,9 +680,11 @@ export function DashboardPage() {
                   <p className="mt-1 text-sm text-forest-500">Temperature is above 28 °C. Consider lowering the target moisture threshold.</p>
                 </div>
               )}
+                  </>
+                )}
 
-              {/* ── Collapsible settings ── */}
-              <div className="mt-4 space-y-2.5">
+                {activeTab === 'settings' && (
+              <div className="mt-2 space-y-2.5">
                 <CollapsibleSection title="Target moisture" subtitle={`Current: ${targetSoil}`} defaultOpen>
                   <p className="mb-4 text-sm text-forest-400 dark:text-slate-400">Soil raw below this value = "wet enough". Drag to set.</p>
                   <div className="flex flex-wrap items-center gap-4">
@@ -749,8 +766,16 @@ export function DashboardPage() {
                           </div>
                           <div className="ml-auto flex items-center gap-1">
                             {linkedProfileId !== id && selectedMac && <button type="button" onClick={() => linkProfileToDevice(id)} className="rounded-xl bg-primary/12 px-2.5 py-1 text-xs font-medium text-primary transition hover:bg-primary/22 dark:bg-primary/25 dark:hover:bg-primary/35">Use for device</button>}
-                            <button type="button" onClick={() => openEditPlant(id)} className="rounded-full p-1.5 text-forest/40 transition hover:bg-sage-100 hover:text-forest dark:text-slate-500 dark:hover:bg-slate-600 dark:hover:text-slate-200" aria-label="Edit profile"><PencilIcon className="h-3.5 w-3.5" /></button>
-                            <button type="button" onClick={() => deleteProfile(id)} className="rounded-full px-2 py-1 text-xs text-terracotta/70 transition hover:bg-red-50 hover:text-terracotta dark:text-red-400 dark:hover:bg-red-900/50">Remove</button>
+                            <button type="button" onClick={() => openEditPlant(id)} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-forest/40 transition hover:bg-sage-100 hover:text-forest dark:text-slate-500 dark:hover:bg-slate-600 dark:hover:text-slate-200" aria-label="Edit profile"><PencilIcon className="h-4 w-4" /></button>
+                            <ConfirmDestructiveButton
+                              label="Remove"
+                              title="Remove plant profile?"
+                              message={`Delete "${p.name}"? This cannot be undone.`}
+                              confirmLabel="Remove"
+                              onConfirm={() => deleteProfile(id)}
+                              variant="danger"
+                              className="rounded-full px-3 py-2 text-xs text-terracotta/70 transition hover:bg-red-50 hover:text-terracotta dark:text-red-400 dark:hover:bg-red-900/50"
+                            />
                           </div>
                         </li>
                       ))}
@@ -847,10 +872,27 @@ export function DashboardPage() {
                     <p className="text-xs text-forest/35 dark:text-forest-500">No watering events recorded yet. Use &quot;Water now&quot; or enable the schedule.</p>
                   )}
                 </CollapsibleSection>
+
+                <CollapsibleSection title="Invite user" subtitle={invitedList.length > 0 ? `${invitedList.length} invited` : 'Share access'}>
+                  <p className="mb-3 text-sm text-forest-400">Share the app link. New users sign up with email and password, then can claim their own devices.</p>
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <input type="text" readOnly value={appUrl} className="min-w-0 flex-1 input-field font-mono !text-xs" />
+                    <button type="button" onClick={handleCopyUrl} className="btn-ghost">{copyOk ? '✓ Copied' : 'Copy link'}</button>
+                  </div>
+                  <form onSubmit={handleInvite} className="mb-2 flex flex-wrap items-center gap-2">
+                    <input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="Email to add to invite list" className="input-field" />
+                    <button type="submit" className="btn-primary">Invite</button>
+                  </form>
+                  {invitedList.length > 0 && <p className="text-xs text-forest/40">Invited: {invitedList.join(', ')}</p>}
+                </CollapsibleSection>
               </div>
-            </>)}
+                )}
+              </>
+            )}
           </>
         )}
+
+        <BottomTabBar activeTab={activeTab} onTabChange={setActiveTab} />
 
         {/* Edit plant modal */}
         {editModalOpen && (
@@ -910,22 +952,6 @@ export function DashboardPage() {
             </motion.div>
           </div>
         )}
-
-        {/* Invite section */}
-        <div className="mt-4 mb-6">
-          <CollapsibleSection title="Invite user" subtitle={invitedList.length > 0 ? `${invitedList.length} invited` : 'Share access'}>
-            <p className="mb-3 text-sm text-forest-400">Share the app link. New users sign up with email and password, then can claim their own devices.</p>
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <input type="text" readOnly value={appUrl} className="min-w-0 flex-1 input-field font-mono !text-xs" />
-              <button type="button" onClick={handleCopyUrl} className="btn-ghost">{copyOk ? '✓ Copied' : 'Copy link'}</button>
-            </div>
-            <form onSubmit={handleInvite} className="mb-2 flex flex-wrap items-center gap-2">
-              <input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="Email to add to invite list" className="input-field" />
-              <button type="submit" className="btn-primary">Invite</button>
-            </form>
-            {invitedList.length > 0 && <p className="text-xs text-forest/40">Invited: {invitedList.join(', ')}</p>}
-          </CollapsibleSection>
-        </div>
       </div>
     </div>
   )

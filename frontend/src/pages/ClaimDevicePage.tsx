@@ -89,7 +89,7 @@ export function ClaimDevicePage() {
 
   return (
     <motion.div
-      className="min-h-screen bg-surface px-4 py-6 md:px-6 md:py-8"
+      className="min-h-screen px-4 py-6 md:px-6 md:py-8"
       variants={staggerContainer}
       initial="hidden"
       animate="visible"
@@ -123,7 +123,7 @@ export function ClaimDevicePage() {
         >
           <div className="mb-4 flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
-              <svg className="h-4.5 w-4.5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="h-5 w-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.14 0M1.394 9.393c5.857-5.858 15.355-5.858 21.213 0" />
               </svg>
             </div>

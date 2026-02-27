@@ -21,7 +21,7 @@ export function CollapsibleSection({ title, subtitle, defaultOpen = false, child
         aria-expanded={open}
       >
         <div className="min-w-0">
-          <p className="stat-label">{title}</p>
+          <p className="text-sm font-medium text-forest dark:text-slate-200">{title}</p>
           {subtitle && !open && (
             <p className="mt-1 text-xs text-forest/35 dark:text-slate-500 line-clamp-1">{subtitle}</p>
           )}

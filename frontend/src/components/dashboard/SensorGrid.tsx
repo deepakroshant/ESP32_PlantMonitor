@@ -3,12 +3,14 @@ import type { DeviceStatus, Readings } from '../../types'
 import { CircularGauge } from '../CircularGauge'
 import { ThermometerIcon } from '../icons/ThermometerIcon'
 import { SunIcon } from '../icons/SunIcon'
+import { SkeletonCard } from '../SkeletonCard'
 import { staggerContainer, cardItem, spring } from '../../lib/motion'
 
 type Props = {
   deviceStatus: DeviceStatus
   dataUntrusted: boolean
   isDelayed: boolean
+  isLoading?: boolean
   displayTemp: number
   temp: number | undefined
   displayGaugePct: number
@@ -69,7 +71,7 @@ function formatPressure(pa: number): string {
 }
 
 export function SensorGrid({
-  deviceStatus, dataUntrusted, isDelayed,
+  deviceStatus, dataUntrusted, isDelayed, isLoading = false,
   displayTemp, temp, displayGaugePct, soilLabel,
   readings, selectedMac,
 }: Props) {
@@ -78,6 +80,17 @@ export function SensorGrid({
   const hasHumidity = readings?.humidity  != null && !Number.isNaN(readings.humidity)
 
   const gridOpacity = dataUntrusted ? 0.32 : isDelayed ? 0.68 : 1
+
+  if (isLoading) {
+    return (
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <SkeletonCard variant="sensor" />
+        <SkeletonCard variant="sensor" />
+        <SkeletonCard variant="gauge" />
+        <SkeletonCard variant="sensor" />
+      </div>
+    )
+  }
 
   return (
     <div className="relative">

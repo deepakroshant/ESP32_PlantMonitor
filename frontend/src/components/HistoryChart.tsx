@@ -134,6 +134,7 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
   }
 
   const showPressureAxis = hasPressure && visibleSeries.pressure
+  const rightMargin = showPressureAxis ? 100 : 28
 
   return (
     <div className="section-card mt-3">
@@ -191,7 +192,7 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={data} margin={{ top: 16, right: showPressureAxis ? 80 : 20, bottom: 12, left: 8 }}>
+          <LineChart data={data} margin={{ top: 16, right: rightMargin, bottom: 12, left: 8 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={isDark ? 'rgba(148,163,184,0.2)' : 'rgba(20,51,42,0.06)'} />
             <XAxis
               dataKey="time"
@@ -226,7 +227,7 @@ export function HistoryChart({ deviceMac }: { deviceMac: string }) {
                 tick={{ fontSize: 10, fill: isDark ? 'rgba(129,140,248,0.9)' : 'rgba(99,102,241,0.6)' }}
                 axisLine={false}
                 tickLine={false}
-                width={52}
+                width={48}
                 domain={['dataMin - 2', 'dataMax + 2']}
                 label={{ value: 'hPa', position: 'insideTopRight', offset: 2, style: { fontSize: 10, fontWeight: 500, fill: isDark ? 'rgba(129,140,248,0.9)' : 'rgba(99,102,241,0.6)' } }}
               />

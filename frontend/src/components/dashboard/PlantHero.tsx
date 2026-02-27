@@ -3,6 +3,7 @@ import type { DeviceStatus, Readings } from '../../types'
 import type { ProfileTip } from '../../utils/profileTips'
 import { PlantIcon } from '../icons/PlantIcon'
 import { PencilIcon } from '../icons/PencilIcon'
+import { SkeletonCard } from '../SkeletonCard'
 import { spring } from '../../lib/motion'
 
 type Props = {
@@ -12,6 +13,7 @@ type Props = {
   deviceStatus: DeviceStatus
   dataUntrusted: boolean
   isDelayed: boolean
+  isLoading?: boolean
   health: string | undefined
   healthOk: boolean
   onEditPlant: () => void
@@ -42,10 +44,14 @@ function formatSecondsAgo(epoch: number): string {
 
 export function PlantHero({
   selectedMac, plantName, plantType, deviceStatus,
-  dataUntrusted, isDelayed, health, healthOk, onEditPlant, readings,
+  dataUntrusted, isDelayed, isLoading = false, health, healthOk, onEditPlant, readings,
   lastWateredEpoch, todayTotalMs = 0, profileTips = [],
 }: Props) {
   const chip = statusChip[deviceStatus]
+
+  if (isLoading) {
+    return <SkeletonCard variant="hero" />
+  }
 
   const healthVariant = dataUntrusted
     ? { bg: 'bg-forest/5 dark:bg-slate-700/50', border: 'border-forest/10 dark:border-slate-600', text: 'text-forest/25 dark:text-slate-400' }
@@ -106,10 +112,10 @@ export function PlantHero({
             <button
               type="button"
               onClick={onEditPlant}
-              className="rounded-full p-1 text-forest/35 transition hover:bg-sage-100 hover:text-forest dark:text-slate-500 dark:hover:bg-slate-600 dark:hover:text-slate-200"
+              className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full text-forest/35 transition hover:bg-sage-100 hover:text-forest dark:text-slate-500 dark:hover:bg-slate-600 dark:hover:text-slate-200"
               aria-label="Edit plant name and type"
             >
-              <PencilIcon className="h-3 w-3" />
+              <PencilIcon className="h-4 w-4" />
             </button>
           </div>
 

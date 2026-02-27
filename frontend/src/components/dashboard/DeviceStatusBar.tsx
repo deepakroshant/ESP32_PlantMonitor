@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import type { DeviceStatus, Readings, DeviceMeta } from '../../types'
 import type { StatusMeta } from '../../utils/deviceStatus'
 import { spring } from '../../lib/motion'
+import { ConfirmDestructiveButton } from '../ConfirmDestructiveButton'
 
 function deviceLabel(mac: string, meta?: DeviceMeta): string {
   if (meta?.name?.trim()) return meta.name
@@ -32,8 +33,18 @@ export function DeviceStatusBar({
   readings, lastUpdated,
 }: Props) {
   const [editOpen, setEditOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
   const [editName, setEditName] = useState('')
   const [editRoom, setEditRoom] = useState('')
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
+    }
+    if (menuOpen) document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [menuOpen])
 
   function openEdit() {
     const m = devicesMeta[selectedMac]
@@ -56,44 +67,91 @@ export function DeviceStatusBar({
       style={{ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
     >
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        {/* Device selector + reset */}
-        <div className="flex items-center gap-2">
+        {/* Device selector — always visible */}
+        <div className="flex min-w-0 flex-1 items-center gap-2 sm:min-w-0">
           <select
             value={selectedMac}
             onChange={(e) => onSelectMac(e.target.value)}
-            className="rounded-xl border border-forest/10 bg-white/85 px-3 py-2 text-xs text-forest shadow-soft focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/15 sm:text-sm dark:border-forest/20 dark:bg-forest-800/60 dark:text-forest-200"
+            className="min-w-0 flex-1 rounded-xl border border-forest/10 bg-white/85 px-3 py-2 text-xs text-forest shadow-soft focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/15 sm:text-sm dark:border-forest/20 dark:bg-forest-800/60 dark:text-forest-200"
             aria-label="Select device"
           >
             {devices.map((mac) => (
               <option key={mac} value={mac}>{deviceLabel(mac, devicesMeta[mac])}</option>
             ))}
           </select>
-          <button
-            type="button"
-            onClick={openEdit}
-            className="rounded-xl border border-forest/10 bg-white/70 px-2.5 py-2 text-forest/50 transition hover:bg-white hover:text-forest dark:border-forest/20 dark:bg-forest-800/40 dark:text-forest-400 dark:hover:bg-forest-700/60 dark:hover:text-forest"
-            aria-label="Edit device name"
-            title="Edit device name and room"
-          >
-            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-          </button>
 
-          <button
-            type="button"
-            onClick={onResetWiFi}
-            disabled={isResetPending}
-            className={`rounded-xl border px-3 py-2 text-xs font-medium transition-all ${
-              isResetPending
-                ? 'cursor-not-allowed border-forest/10 bg-white/40 text-forest/30 dark:border-slate-600 dark:bg-slate-700/40 dark:text-slate-500'
-                : 'border-red-200/70 bg-white/70 text-red-500 hover:bg-red-50 hover:border-red-300 dark:border-red-800/60 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50 dark:hover:border-red-700'
-            }`}
-            title="Device will clear its WiFi config and restart in AP mode"
-          >
-            {isResetPending ? 'Reset sent…' : 'Reset WiFi'}
-          </button>
+          {/* Desktop: edit + reset visible */}
+          <div className="hidden items-center gap-2 sm:flex">
+            <button
+              type="button"
+              onClick={openEdit}
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-forest/10 bg-white/70 text-forest/50 transition hover:bg-white hover:text-forest dark:border-forest/20 dark:bg-forest-800/40 dark:text-forest-400 dark:hover:bg-forest-700/60 dark:hover:text-forest"
+              aria-label="Edit device name"
+              title="Edit device name and room"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+            </button>
+            <ConfirmDestructiveButton
+              label={isResetPending ? 'Reset sent…' : 'Reset WiFi'}
+              title="Reset device WiFi?"
+              message="The device will clear its WiFi config and restart in setup mode. You must reconnect it to your WiFi. Data will pause until it reconnects."
+              confirmLabel="Reset"
+              onConfirm={onResetWiFi}
+              disabled={isResetPending}
+              variant="danger"
+              className={`rounded-xl border px-3 py-2 text-xs font-medium transition-all ${
+                isResetPending
+                  ? 'cursor-not-allowed border-forest/10 bg-white/40 text-forest/30 dark:border-slate-600 dark:bg-slate-700/40 dark:text-slate-500'
+                  : 'border-red-200/70 bg-white/70 text-red-500 hover:bg-red-50 hover:border-red-300 dark:border-red-800/60 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50 dark:hover:border-red-700'
+              }`}
+            />
+          </div>
+
+          {/* Mobile: overflow menu */}
+          <div className="relative sm:hidden" ref={menuRef}>
+            <button
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-forest/10 bg-white/70 text-forest/50 transition hover:bg-white hover:text-forest dark:border-forest/20 dark:bg-forest-800/40 dark:text-forest-400"
+              aria-label="More options"
+              aria-expanded={menuOpen}
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" /></svg>
+            </button>
+            {menuOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                className="absolute right-0 top-full z-20 mt-1 min-w-[180px] rounded-xl border border-forest/10 bg-white py-2 shadow-lift dark:border-slate-600 dark:bg-slate-800"
+              >
+                <button type="button" onClick={() => { openEdit(); setMenuOpen(false) }} className="flex min-h-[44px] w-full items-center gap-3 px-4 text-left text-sm text-forest hover:bg-sage-50 dark:text-slate-200 dark:hover:bg-slate-700">
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                  Edit device
+                </button>
+                <ConfirmDestructiveButton
+                  label="Reset WiFi"
+                  title="Reset device WiFi?"
+                  message="The device will clear its WiFi config and restart. You must reconnect it."
+                  confirmLabel="Reset"
+                  onConfirm={async () => { await onResetWiFi(); setMenuOpen(false) }}
+                  disabled={isResetPending}
+                  variant="danger"
+                  className="flex min-h-[44px] w-full items-center gap-3 px-4 text-left text-sm text-red-500 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-900/40"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                  {isResetPending ? 'Reset sent…' : 'Reset WiFi'}
+                </ConfirmDestructiveButton>
+                <Link to="/overview" onClick={() => setMenuOpen(false)} className="flex min-h-[44px] items-center gap-3 px-4 text-sm text-forest-500 hover:bg-sage-50 dark:text-slate-300 dark:hover:bg-slate-700">
+                  All devices
+                </Link>
+              </motion.div>
+            )}
+          </div>
         </div>
 
-        <Link to="/overview" className="rounded-xl border border-forest/10 bg-white/70 px-2.5 py-2 text-xs font-medium text-forest-500 transition hover:bg-white hover:text-forest dark:border-slate-600 dark:bg-slate-700/60 dark:text-slate-300 dark:hover:bg-slate-600 dark:hover:text-white">
+        {/* All devices link (desktop) */}
+        <Link to="/overview" className="hidden rounded-xl border border-forest/10 bg-white/70 px-2.5 py-2 text-xs font-medium text-forest-500 transition hover:bg-white hover:text-forest sm:flex dark:border-slate-600 dark:bg-slate-700/60 dark:text-slate-300 dark:hover:bg-slate-600 dark:hover:text-white">
           All devices
         </Link>
 
