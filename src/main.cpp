@@ -44,6 +44,7 @@ static constexpr uint8_t RELAY_PIN        = 25;  // Active LOW: LOW = pump ON
 // -----------------------------------------------------------------------------
 static constexpr uint32_t SENSOR_READ_INTERVAL_MS   = 2000;   // 2 s
 static constexpr uint32_t FIREBASE_SYNC_INTERVAL_MS = 5000;   // 5 s
+static constexpr uint32_t RESET_POLL_MS            = 1000;   // Check reset flag every 1 s for instant response
 static constexpr TickType_t PUMP_PULSE_MS  = pdMS_TO_TICKS(1000);
 static constexpr TickType_t PUMP_SOAK_MS   = pdMS_TO_TICKS(5000);
 static constexpr TickType_t PUMP_IDLE_MS   = pdMS_TO_TICKS(500);
@@ -635,7 +636,8 @@ String healthStatus(const SensorState &s) {
 }
 
 void taskFirebaseSync(void *pv) {
-  const TickType_t period = pdMS_TO_TICKS(FIREBASE_SYNC_INTERVAL_MS);
+  const TickType_t fastPeriod = pdMS_TO_TICKS(RESET_POLL_MS);  // 1 s — reset check + loop rate
+  static int cycleCount = 0;
 
   Serial.println("[Sync] Waiting for first sensor reading...");
   while (!gSensorReady) {
@@ -647,6 +649,9 @@ void taskFirebaseSync(void *pv) {
   static unsigned long syncFailCount = 0;
 
   while (true) {
+    cycleCount++;
+    bool doFullSync = (cycleCount % (FIREBASE_SYNC_INTERVAL_MS / RESET_POLL_MS)) == 0;
+
     SensorState s{};
     if (xSemaphoreTake(gStateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
       s = gState;
@@ -655,12 +660,12 @@ void taskFirebaseSync(void *pv) {
 
     bool fbReady = Firebase.ready();
     if (!fbReady) {
-      Serial.println("[Sync] Firebase not ready, skipping this cycle.");
-      vTaskDelay(period);
+      if (doFullSync) Serial.println("[Sync] Firebase not ready, skipping this cycle.");
+      vTaskDelay(fastPeriod);
       continue;
     }
 
-    if (xSemaphoreTake(gFirebaseMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+    if (doFullSync && xSemaphoreTake(gFirebaseMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
       FirebaseJson json;
       if (!isnan(s.temperatureC)) {
         json.set("temperature", s.temperatureC);
@@ -741,15 +746,11 @@ void taskFirebaseSync(void *pv) {
       xSemaphoreGive(gFirebaseMutex);
     }
 
-    // Re-provisioning: app set devices/<MAC>/control/resetProvisioning = true → clear WiFi, reboot.
+    // Re-provisioning: checked every 1 s so Reset button responds within ~1–2 s.
+    // App set devices/<MAC>/control/resetProvisioning = true → clear WiFi, reboot.
     // CRITICAL: clear the flag in Firebase BEFORE resetting, otherwise the device
     // will find it still true on next boot and enter an infinite reset loop.
-    // Grace period: 30 s after first sync — avoids boot loop from Firebase propagation delay
-    // while still allowing user-initiated reset within ~30 s of device coming online.
-    static unsigned long s_firstSyncAt = 0;
-    if (s_firstSyncAt == 0) s_firstSyncAt = millis();
-    bool inGracePeriod = (millis() - s_firstSyncAt) < 30000;
-
+    // No grace period — when user clicks Reset, we act immediately (within 1–2 s).
     if (Firebase.ready() && fetchResetProvisioning()) {
       String path = "devices/" + deviceId + "/control/resetProvisioning";
       bool cleared = false;
@@ -765,20 +766,24 @@ void taskFirebaseSync(void *pv) {
       }
       if (!cleared) {
         Serial.println("[Reset] Could not clear flag in Firebase — skipping reset to avoid boot loop.");
-      } else if (inGracePeriod) {
-        Serial.println("[Reset] Flag cleared (grace period — not resetting).");
       } else {
         Serial.println("[Reset] Flag cleared. Clearing WiFi and Firebase NVS, restarting...");
         clearFirebaseNVS();
-        wm.resetSettings();
-        WiFi.disconnect(true);
-        esp_wifi_restore();
-        delay(1000);
+        // Erase WiFi credentials from NVS — must do while WiFi/STA is still active.
+        // WiFi.eraseAP() wraps esp_wifi_restore() and clears stored SSID/password.
+        if (WiFi.eraseAP()) {
+          Serial.println("[Reset] WiFi credentials erased.");
+        } else {
+          Serial.println("[Reset] WiFi.eraseAP failed, trying wm.resetSettings...");
+          wm.resetSettings();
+          WiFi.disconnect(true, true);
+        }
+        delay(1500);
         ESP.restart();
       }
     }
 
-    vTaskDelay(period);
+    vTaskDelay(fastPeriod);
   }
 }
 
