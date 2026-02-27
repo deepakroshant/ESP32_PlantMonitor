@@ -284,13 +284,30 @@ void setup() {
     wm.server->on("/connecttest.txt", HTTP_GET, redirectToPortal);
   });
 
-  if (!wm.autoConnect("SmartPlantPro")) {
+  // Auto-recovery: if Firebase creds were missing, force portal instead of autoConnect
+  bool forcePortal = false;
+  {
+    Preferences p;
+    if (p.begin(NVS_NAMESPACE, true)) {
+      forcePortal = (p.getInt("force_portal", 0) == 1);
+      p.end();
+    }
+  }
+  if (forcePortal) {
+    Preferences p;
+    if (p.begin(NVS_NAMESPACE, false)) {
+      p.remove("force_portal");
+      p.end();
+    }
+    Serial.println("Opening config portal — enter WiFi and Firebase (PIN 1234 to unlock Firebase).");
+    wm.startConfigPortal("SmartPlantPro");
+  } else if (!wm.autoConnect("SmartPlantPro")) {
     Serial.println("WiFiManager failed to connect, restarting...");
     delay(3000);
     ESP.restart();
   }
 
-  // Save Firebase fields from portal to NVS if user filled them
+  // Save Firebase fields from portal to NVS if user filled them (works for both autoConnect and startConfigPortal)
   const char* api = p_fb_api.getValue();
   const char* url = p_fb_url.getValue();
   const char* em = p_fb_email.getValue();
@@ -352,6 +369,17 @@ void setup() {
   Serial.println();
   if (!Firebase.ready()) {
     Serial.println("Firebase not ready after 10s. Check API key, DB_URL, email and password.");
+    // Auto-recovery: if credentials are empty, reopen config portal on next boot
+    if (strlen(nvs_fb_api_key) == 0 || strlen(nvs_fb_db_url) == 0) {
+      Preferences prefs;
+      if (prefs.begin(NVS_NAMESPACE, false)) {
+        prefs.putInt("force_portal", 1);
+        prefs.end();
+      }
+      Serial.println("Firebase credentials missing. Restarting to open config portal — fill API key, URL, email, password (PIN 1234).");
+      delay(3000);
+      ESP.restart();
+    }
   } else {
     Serial.println("Firebase is ready.");
   }
