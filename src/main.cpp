@@ -767,8 +767,8 @@ void taskFirebaseSync(void *pv) {
       if (!cleared) {
         Serial.println("[Reset] Could not clear flag in Firebase — skipping reset to avoid boot loop.");
       } else {
-        Serial.println("[Reset] Flag cleared. Clearing WiFi and Firebase NVS, restarting...");
-        clearFirebaseNVS();
+        Serial.println("[Reset] Flag cleared. Clearing WiFi only (Firebase config kept), restarting...");
+        // Do NOT clear Firebase NVS — user keeps same project when changing WiFi.
         // Erase WiFi credentials from NVS — must do while WiFi/STA is still active.
         // WiFi.eraseAP() wraps esp_wifi_restore() and clears stored SSID/password.
         if (WiFi.eraseAP()) {
