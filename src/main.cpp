@@ -271,27 +271,48 @@ void setup() {
   wm.setCaptivePortalEnable(true);
   wm.setMinimumSignalQuality(10);  // Accept weaker signals during scan for faster UI
 
-  // Captive portal: redirect connectivity-check URLs to config page (root).
-  // Register FIRST so we respond before any 404 — instant redirect, no delay.
-  wm.setWebServerCallback([]() {
-    auto redirect = []() {
-      wm.server->sendHeader("Location", "http://192.168.4.1/");
+  // Captive portal: redirect to /start (landing) for fast response, then user chooses Configure.
+  const char* LANDING_HTML =
+    "<!DOCTYPE html><html><head><meta charset=utf-8><meta name=viewport content=\"width=device-width\">"
+    "<title>Smart Plant Pro</title><style>"
+    "body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;"
+    "font-family:system-ui,sans-serif;background:linear-gradient(180deg,#f4f9f0 0%,#e8f5e3 100%);}"
+    ".card{background:#fff;border-radius:20px;padding:32px;box-shadow:0 4px 20px rgba(0,0,0,.08);text-align:center;max-width:320px;}"
+    "h1{font-size:1.5rem;color:#1b3a2d;margin:0 0 8px;} .sub{color:#5a7a6a;font-size:.9rem;margin-bottom:28px;}"
+    "a{display:block;background:#3da56b;color:#fff!important;text-decoration:none;padding:14px 24px;border-radius:12px;"
+    "font-weight:600;margin:8px 0;transition:background .2s;} a:hover{background:#2e8a56;}"
+    "a.second{background:#e8f5e3;color:#2e6b4a!important;} a.second:hover{background:#d4edd8;}"
+    "</style></head><body><div class=card>"
+    "<div style=font-size:2.5rem>🌱</div><h1>Smart Plant Pro</h1><p class=sub>Device setup</p>"
+    "<a href=/wifi>Configure WiFi</a>"
+    "<a href=/info class=second>Device info</a>"
+    "<a href=/restart class=second>Reset &amp; reconnect</a>"
+    "</div></body></html>";
+
+  wm.setWebServerCallback([LANDING_HTML]() {
+    // Redirect connectivity checks → /start (small page, loads fast)
+    auto redirectStart = []() {
+      wm.server->sendHeader("Location", "http://192.168.4.1/start");
       wm.server->send(302, "text/plain", "");
     };
-    wm.server->on("/generate_204", HTTP_GET, redirect);
-    wm.server->on("/gen_204", HTTP_GET, redirect);
-    wm.server->on("/connectivitycheck", HTTP_GET, redirect);
-    wm.server->on("/hotspot-detect.html", HTTP_GET, redirect);
-    wm.server->on("/hotspot-detect.html", HTTP_HEAD, redirect);
-    wm.server->on("/library/test/success.html", HTTP_GET, redirect);
-    wm.server->on("/ncsi.txt", HTTP_GET, redirect);
-    wm.server->on("/connecttest.txt", HTTP_GET, redirect);
-    wm.server->on("/redirect", HTTP_GET, redirect);
-    wm.server->on("/success.txt", HTTP_GET, redirect);
-    wm.server->on("/canonical.html", HTTP_GET, redirect);
-    wm.server->on("/success", HTTP_GET, redirect);
-    wm.server->on("/fwlink", HTTP_GET, redirect);
-    wm.server->onNotFound(redirect);  // Catch any other path → instant redirect
+    wm.server->on("/start", HTTP_GET, [LANDING_HTML]() {
+      wm.server->sendHeader("Cache-Control", "no-cache");
+      wm.server->send(200, "text/html", LANDING_HTML);
+    });
+    wm.server->on("/generate_204", HTTP_GET, redirectStart);
+    wm.server->on("/gen_204", HTTP_GET, redirectStart);
+    wm.server->on("/connectivitycheck", HTTP_GET, redirectStart);
+    wm.server->on("/hotspot-detect.html", HTTP_GET, redirectStart);
+    wm.server->on("/hotspot-detect.html", HTTP_HEAD, redirectStart);
+    wm.server->on("/library/test/success.html", HTTP_GET, redirectStart);
+    wm.server->on("/ncsi.txt", HTTP_GET, redirectStart);
+    wm.server->on("/connecttest.txt", HTTP_GET, redirectStart);
+    wm.server->on("/redirect", HTTP_GET, redirectStart);
+    wm.server->on("/success.txt", HTTP_GET, redirectStart);
+    wm.server->on("/canonical.html", HTTP_GET, redirectStart);
+    wm.server->on("/success", HTTP_GET, redirectStart);
+    wm.server->on("/fwlink", HTTP_GET, redirectStart);
+    wm.server->onNotFound(redirectStart);
   });
 
   // Clear any stale force_portal flag from previous firmware
