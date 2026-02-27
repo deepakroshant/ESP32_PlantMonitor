@@ -284,24 +284,13 @@ void setup() {
     wm.server->on("/connecttest.txt", HTTP_GET, redirectToPortal);
   });
 
-  // Auto-recovery: if Firebase creds were missing, force portal instead of autoConnect
-  bool forcePortal = false;
+  // Clear any stale force_portal flag from previous firmware
   {
     Preferences p;
-    if (p.begin(NVS_NAMESPACE, true)) {
-      forcePortal = (p.getInt("force_portal", 0) == 1);
-      p.end();
-    }
+    if (p.begin(NVS_NAMESPACE, false)) { p.remove("force_portal"); p.end(); }
   }
-  if (forcePortal) {
-    Preferences p;
-    if (p.begin(NVS_NAMESPACE, false)) {
-      p.remove("force_portal");
-      p.end();
-    }
-    Serial.println("Opening config portal — enter WiFi and Firebase (PIN 1234 to unlock Firebase).");
-    wm.startConfigPortal("SmartPlantPro");
-  } else if (!wm.autoConnect("SmartPlantPro")) {
+
+  if (!wm.autoConnect("SmartPlantPro")) {
     Serial.println("WiFiManager failed to connect, restarting...");
     delay(3000);
     ESP.restart();
@@ -332,7 +321,7 @@ void setup() {
   Serial.print("Waiting for NTP");
   time_t now = time(nullptr);
   int ntpRetries = 0;
-  while (now < 1000000000L && ntpRetries < 20) {
+  while (now < 1000000000L && ntpRetries < 40) {
     delay(200);
     now = time(nullptr);
     ntpRetries++;
@@ -368,18 +357,10 @@ void setup() {
   }
   Serial.println();
   if (!Firebase.ready()) {
-    Serial.println("Firebase not ready after 10s. Check API key, DB_URL, email and password.");
-    // Auto-recovery: if credentials are empty, reopen config portal on next boot
-    if (strlen(nvs_fb_api_key) == 0 || strlen(nvs_fb_db_url) == 0) {
-      Preferences prefs;
-      if (prefs.begin(NVS_NAMESPACE, false)) {
-        prefs.putInt("force_portal", 1);
-        prefs.end();
-      }
-      Serial.println("Firebase credentials missing. Restarting to open config portal — fill API key, URL, email, password (PIN 1234).");
-      delay(3000);
-      ESP.restart();
-    }
+    Serial.println("Firebase not ready after 10s. Will keep retrying in background.");
+    Serial.printf("  API key: %s\n", strlen(nvs_fb_api_key) > 0 ? "(set)" : "(EMPTY)");
+    Serial.printf("  DB URL:  %s\n", strlen(nvs_fb_db_url) > 0 ? "(set)" : "(EMPTY)");
+    Serial.printf("  Email:   %s\n", strlen(nvs_fb_email) > 0 ? "(set)" : "(EMPTY)");
   } else {
     Serial.println("Firebase is ready.");
   }
