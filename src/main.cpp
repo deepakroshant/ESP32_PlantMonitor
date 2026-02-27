@@ -269,34 +269,29 @@ void setup() {
   wm.setSaveConnectTimeout(6);  // Faster redirect after WiFi save
   wm.setConfigPortalTimeout(0);
   wm.setCaptivePortalEnable(true);
+  wm.setMinimumSignalQuality(10);  // Accept weaker signals during scan for faster UI
 
-  // Fast captive portal: intercept ALL connectivity-check URLs from every OS/browser.
-  // Returns a 302 redirect to the config page so the captive portal popup opens instantly.
+  // Captive portal: redirect connectivity-check URLs to config page (root).
+  // Register FIRST so we respond before any 404 — instant redirect, no delay.
   wm.setWebServerCallback([]() {
-    auto redirectToPortal = []() {
-      wm.server->sendHeader("Location", "http://192.168.4.1/wifi");
-      wm.server->sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    auto redirect = []() {
+      wm.server->sendHeader("Location", "http://192.168.4.1/");
       wm.server->send(302, "text/plain", "");
     };
-    // Android
-    wm.server->on("/generate_204", HTTP_GET, redirectToPortal);
-    wm.server->on("/gen_204", HTTP_GET, redirectToPortal);
-    wm.server->on("/connectivitycheck", HTTP_GET, redirectToPortal);
-    // Apple iOS / macOS
-    wm.server->on("/hotspot-detect.html", HTTP_GET, redirectToPortal);
-    wm.server->on("/library/test/success.html", HTTP_GET, redirectToPortal);
-    // Windows
-    wm.server->on("/ncsi.txt", HTTP_GET, redirectToPortal);
-    wm.server->on("/connecttest.txt", HTTP_GET, redirectToPortal);
-    wm.server->on("/redirect", HTTP_GET, redirectToPortal);
-    // Firefox
-    wm.server->on("/success.txt", HTTP_GET, redirectToPortal);
-    wm.server->on("/canonical.html", HTTP_GET, redirectToPortal);
-    // Generic fallback
-    wm.server->on("/success", HTTP_GET, redirectToPortal);
-    wm.server->on("/fwlink", HTTP_GET, redirectToPortal);
-    // Catch-all: any unknown path → redirect (prevents "handler not found" errors)
-    wm.server->onNotFound(redirectToPortal);
+    wm.server->on("/generate_204", HTTP_GET, redirect);
+    wm.server->on("/gen_204", HTTP_GET, redirect);
+    wm.server->on("/connectivitycheck", HTTP_GET, redirect);
+    wm.server->on("/hotspot-detect.html", HTTP_GET, redirect);
+    wm.server->on("/hotspot-detect.html", HTTP_HEAD, redirect);
+    wm.server->on("/library/test/success.html", HTTP_GET, redirect);
+    wm.server->on("/ncsi.txt", HTTP_GET, redirect);
+    wm.server->on("/connecttest.txt", HTTP_GET, redirect);
+    wm.server->on("/redirect", HTTP_GET, redirect);
+    wm.server->on("/success.txt", HTTP_GET, redirect);
+    wm.server->on("/canonical.html", HTTP_GET, redirect);
+    wm.server->on("/success", HTTP_GET, redirect);
+    wm.server->on("/fwlink", HTTP_GET, redirect);
+    wm.server->onNotFound(redirect);  // Catch any other path → instant redirect
   });
 
   // Clear any stale force_portal flag from previous firmware
