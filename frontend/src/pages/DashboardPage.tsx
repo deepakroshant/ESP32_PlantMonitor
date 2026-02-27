@@ -483,7 +483,7 @@ export function DashboardPage() {
     offline: `Last seen ${lastSeenLabel} — device is not sending data`,
     syncing: resetRequestedAt > 0 ? 'Device is restarting into setup mode…' : 'Waiting for sensor data…',
     wifi_connected: 'Connected to WiFi — waiting for sensor data…',
-    no_data: 'This device has never sent readings',
+    no_data: 'Waiting for first reading…',
   }
 
   // ── Render ──

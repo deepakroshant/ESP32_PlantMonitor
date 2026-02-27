@@ -34,7 +34,7 @@ function FrozenOverlay({ deviceStatus }: { deviceStatus: DeviceStatus }) {
     deviceStatus === 'syncing' || deviceStatus === 'wifi_connected'
       ? 'Waiting for sensor data…'
       : deviceStatus === 'no_data'
-        ? 'No data yet'
+        ? 'Waiting for first reading…'
         : 'Data frozen — device offline'
 
   return (

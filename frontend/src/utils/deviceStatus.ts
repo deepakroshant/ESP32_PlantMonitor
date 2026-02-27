@@ -51,7 +51,7 @@ export const STATUS_META: Record<DeviceStatus, StatusMeta> = {
   offline:        { color: 'text-red-500',    bg: 'bg-red-50',    border: 'border-red-200/60',    label: 'Offline',        pulse: false, dotColor: 'bg-red-500', darkBg: 'dark:bg-red-900/30', darkBorder: 'dark:border-red-800/50', darkColor: 'dark:text-red-300' },
   syncing:        { color: 'text-blue-500',   bg: 'bg-blue-50',   border: 'border-blue-200/60',   label: 'Syncing',        pulse: true,  dotColor: 'bg-blue-500', darkBg: 'dark:bg-blue-900/30', darkBorder: 'dark:border-blue-700/50', darkColor: 'dark:text-blue-300' },
   wifi_connected: { color: 'text-amber-600',  bg: 'bg-amber-50',  border: 'border-amber-200/60',  label: 'WiFi Connected', pulse: true,  dotColor: 'bg-amber-500', darkBg: 'dark:bg-amber-900/30', darkBorder: 'dark:border-amber-700/50', darkColor: 'dark:text-amber-300' },
-  no_data:        { color: 'text-gray-400',   bg: 'bg-gray-50',   border: 'border-gray-200/60',   label: 'No Data',        pulse: false, dotColor: 'bg-gray-400', darkBg: 'dark:bg-slate-800/50', darkBorder: 'dark:border-slate-600/50', darkColor: 'dark:text-slate-400' },
+  no_data:        { color: 'text-gray-500',   bg: 'bg-gray-50',   border: 'border-gray-200/60',   label: 'Connecting',     pulse: true,  dotColor: 'bg-gray-400', darkBg: 'dark:bg-slate-800/50', darkBorder: 'dark:border-slate-600/50', darkColor: 'dark:text-slate-400' },
 }
 
 export function formatSecondsAgo(sec: number, tsValid: boolean): string {

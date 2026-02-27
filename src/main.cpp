@@ -43,7 +43,7 @@ static constexpr uint8_t RELAY_PIN        = 25;  // Active LOW: LOW = pump ON
 // Timing and defaults
 // -----------------------------------------------------------------------------
 static constexpr uint32_t SENSOR_READ_INTERVAL_MS   = 2000;   // 2 s
-static constexpr uint32_t FIREBASE_SYNC_INTERVAL_MS = 5000;   // 5 s
+static constexpr uint32_t FIREBASE_SYNC_INTERVAL_MS = 3000;   // 3 s — faster screen updates
 static constexpr uint32_t RESET_POLL_MS            = 1000;   // Check reset flag every 1 s for instant response
 static constexpr TickType_t PUMP_PULSE_MS  = pdMS_TO_TICKS(1000);
 static constexpr TickType_t PUMP_SOAK_MS   = pdMS_TO_TICKS(5000);
@@ -688,9 +688,11 @@ void taskFirebaseSync(void *pv) {
   static unsigned long syncCount = 0;
   static unsigned long syncFailCount = 0;
 
+  bool firstPushDone = false;
   while (true) {
     cycleCount++;
-    bool doFullSync = (cycleCount % (FIREBASE_SYNC_INTERVAL_MS / RESET_POLL_MS)) == 0;
+    int syncMod = FIREBASE_SYNC_INTERVAL_MS / RESET_POLL_MS;  // 3
+    bool doFullSync = !firstPushDone || (cycleCount % syncMod) == 0;
 
     SensorState s{};
     if (xSemaphoreTake(gStateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
@@ -730,6 +732,7 @@ void taskFirebaseSync(void *pv) {
         Serial.println(fbClient.errorReason());
       } else {
         syncCount++;
+        firstPushDone = true;
         if (syncCount <= 5 || syncCount % 20 == 0) {
           Serial.printf("[Sync] Push #%lu OK | temp=%.1f pres=%.0f hum=%.1f soil=%u light=%d ts=%d\n",
             syncCount, s.temperatureC, s.pressurePa, s.humidity,
