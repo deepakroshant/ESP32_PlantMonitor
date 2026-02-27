@@ -744,11 +744,11 @@ void taskFirebaseSync(void *pv) {
     // Re-provisioning: app set devices/<MAC>/control/resetProvisioning = true → clear WiFi, reboot.
     // CRITICAL: clear the flag in Firebase BEFORE resetting, otherwise the device
     // will find it still true on next boot and enter an infinite reset loop.
-    // Grace period: ignore reset for 3 min after first sync — avoids responding to stale flag
-    // left from a previous "Reset WiFi" click before user reconfigured via portal.
+    // Grace period: 30 s after first sync — avoids boot loop from Firebase propagation delay
+    // while still allowing user-initiated reset within ~30 s of device coming online.
     static unsigned long s_firstSyncAt = 0;
     if (s_firstSyncAt == 0) s_firstSyncAt = millis();
-    bool inGracePeriod = (millis() - s_firstSyncAt) < 180000;
+    bool inGracePeriod = (millis() - s_firstSyncAt) < 30000;
 
     if (Firebase.ready() && fetchResetProvisioning()) {
       String path = "devices/" + deviceId + "/control/resetProvisioning";
