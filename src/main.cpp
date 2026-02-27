@@ -127,6 +127,46 @@ void clearFirebaseNVS();
 void loadFirebaseFromNVSAndApply();
 
 // -----------------------------------------------------------------------------
+// Block guest/captive-portal WiFi — these block NTP, Firebase, and break the device
+// -----------------------------------------------------------------------------
+static const char* const BLOCKED_SSIDS[] = {
+  "ubcvisitor", "ubc-guest", "ubc secure", "ubcsecure",  // UBC captive
+  "xfinitywifi", "xfinity",
+  "attwifi", "att-wifi",
+  "starbucks", "starbucks_guest", "starbucks-guest",
+  "airport", "boingo", "gogoinflight",
+  "wayport", "wifire", "tmobile", "t-mobile",
+  "coxwifi", "comcast", "centurylink",
+  nullptr
+};
+
+static bool isBlockedSSID(const char* ssid) {
+  if (!ssid || strlen(ssid) == 0) return false;
+  String s(ssid);
+  s.toLowerCase();
+  s.trim();
+  for (int i = 0; BLOCKED_SSIDS[i] != nullptr; i++) {
+    String b(BLOCKED_SSIDS[i]);
+    b.toLowerCase();
+    if (s.indexOf(b) >= 0) return true;  // SSID contains blocked pattern
+  }
+  return false;
+}
+
+static void clearBadWiFiAndRestart(const char* reason) {
+  Serial.println(reason);
+  Serial.println("Clearing WiFi config and restarting into setup mode...");
+  WiFi.disconnect(true, true);
+  if (WiFi.eraseAP()) {
+    Serial.println("[WiFi] Stored credentials erased.");
+  } else {
+    wm.resetSettings();
+  }
+  delay(2000);
+  ESP.restart();
+}
+
+// -----------------------------------------------------------------------------
 // Setup
 // -----------------------------------------------------------------------------
 void setup() {
@@ -192,9 +232,16 @@ void setup() {
     "#spp-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:#f4f9f0;"
     "display:flex;align-items:center;justify-content:center;z-index:9999}"
     "</style>"
-    // JS: show "Connecting…" overlay when WiFi form is submitted
+    // JS: hide blocked guest/captive networks from WiFi list; show connecting overlay on submit
     "<script>"
     "document.addEventListener('DOMContentLoaded',function(){"
+      "var b=['ubcvisitor','ubc-guest','xfinitywifi','attwifi','starbucks','airport','boingo','coxwifi','comcast','wayport','gogoinflight'];"
+      "var list=document.getElementById('wifi_list')||document.querySelector('.q')||document.body;"
+      "var links=list.querySelectorAll ? list.querySelectorAll('a, li, div[class]') : [];"
+      "for(var i=0;i<links.length;i++){"
+        "var t=(links[i].textContent||links[i].innerText||'').toLowerCase().split(/[\\s(]/)[0]||'';"
+        "for(var j=0;j<b.length;j++){ if(t.indexOf(b[j])>=0){links[i].style.display='none';break;} }"
+      "}"
       "var f=document.querySelector('form[action=\"/wifisave\"]');"
       "if(f)f.addEventListener('submit',function(){"
         "var o=document.createElement('div');"
@@ -327,6 +374,14 @@ void setup() {
     ESP.restart();
   }
 
+  // Block guest/captive-portal WiFi — they block NTP & Firebase and break the device
+  {
+    const char* ssid = WiFi.SSID().c_str();
+    if (isBlockedSSID(ssid)) {
+      clearBadWiFiAndRestart("ERROR: This network is not supported (guest/captive portal). Use a standard home/office WiFi.");
+    }
+  }
+
   // Save Firebase fields from portal to NVS if user filled them (works for both autoConnect and startConfigPortal)
   const char* api = p_fb_api.getValue();
   const char* url = p_fb_url.getValue();
@@ -362,7 +417,8 @@ void setup() {
   if (now >= 1000000000L) {
     Serial.printf("NTP synced: %ld\n", (long)now);
   } else {
-    Serial.println("NTP sync failed; timestamps will be inaccurate.");
+    // NTP failed = network likely blocks outbound (captive portal, guest WiFi, firewall)
+    clearBadWiFiAndRestart("ERROR: This network blocks internet access (NTP failed). Use a standard home/office WiFi.");
   }
 
   deviceId = WiFi.macAddress(); // e.g. "24:6F:28:AA:BB:CC"

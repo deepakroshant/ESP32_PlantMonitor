@@ -19,8 +19,10 @@ import { PlantHero } from '../components/dashboard/PlantHero'
 import { SensorGrid } from '../components/dashboard/SensorGrid'
 import { fadeSlideUp, fadeScale } from '../lib/motion'
 import { CollapsibleSection } from '../components/CollapsibleSection'
-import { BottomTabBar, type DashboardTab } from '../components/BottomTabBar'
 import { ConfirmDestructiveButton } from '../components/ConfirmDestructiveButton'
+import { ThemeToggleIcon } from '../components/icons/ThemeToggleIcon'
+
+export type DashboardTab = 'dashboard' | 'settings'
 
 const EXAMPLE_PLANTS = [
   { id: 'mint', label: 'Mint', targetSoil: 2000 },
@@ -498,35 +500,63 @@ export function DashboardPage() {
 
   // ── Render ──
   return (
-    <div className="min-h-screen p-4 pb-28 md:p-6 md:pb-28 lg:p-8 lg:pb-28">
+    <div className="min-h-screen p-4 pb-8 md:p-6 lg:p-8">
       <div className="mx-auto max-w-4xl">
-        {/* Header */}
+        {/* Floating header — Dashboard, Settings, Theme, Add device, Sign out */}
         <motion.header
           variants={fadeSlideUp}
           initial="hidden"
           animate="visible"
-          className="mb-7 flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-forest/[0.06] bg-white/80 px-4 py-3 shadow-card backdrop-blur-md sm:px-6 sm:py-4 dark:border-slate-600/50 dark:bg-slate-800/90"
+          className="sticky top-4 z-20 mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-forest/[0.08] bg-white/90 px-4 py-2.5 shadow-lg backdrop-blur-xl dark:border-slate-600/40 dark:bg-slate-800/95 sm:gap-4 sm:px-5 sm:py-3"
         >
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-3 sm:gap-4">
             <div
-              className="flex h-9 w-9 items-center justify-center rounded-xl shadow-sm"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl sm:h-9 sm:w-9"
               style={{ background: 'linear-gradient(135deg, #4a9b6d 0%, #2f6347 65%, #1c3d2c 100%)' }}
             >
-              <PlantIcon className="h-5 w-5 text-white" />
+              <PlantIcon className="h-4 w-4 text-white sm:h-5 sm:w-5" />
             </div>
-            <h1 className="font-display text-lg font-bold tracking-tight text-forest dark:text-slate-100 sm:text-xl">Smart Plant Pro</h1>
+            <h1 className="font-display text-base font-bold tracking-tight text-forest dark:text-slate-100 sm:text-lg">Smart Plant Pro</h1>
+            {/* Inline tabs — Dashboard | Settings */}
+            <nav className="ml-2 flex items-center gap-0.5 rounded-xl bg-forest/[0.04] p-0.5 dark:bg-slate-700/50 sm:ml-4" aria-label="Main navigation">
+              <button
+                type="button"
+                onClick={() => setActiveTab('dashboard')}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors sm:px-4 ${
+                  activeTab === 'dashboard'
+                    ? 'bg-white text-primary shadow-sm dark:bg-slate-600 dark:text-primary-300'
+                    : 'text-forest/50 hover:text-forest/70 dark:text-slate-400 dark:hover:text-slate-300'
+                }`}
+                aria-current={activeTab === 'dashboard' ? 'page' : undefined}
+              >
+                Dashboard
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('settings')}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors sm:px-4 ${
+                  activeTab === 'settings'
+                    ? 'bg-white text-primary shadow-sm dark:bg-slate-600 dark:text-primary-300'
+                    : 'text-forest/50 hover:text-forest/70 dark:text-slate-400 dark:hover:text-slate-300'
+                }`}
+                aria-current={activeTab === 'settings' ? 'page' : undefined}
+              >
+                Settings
+              </button>
+            </nav>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <ThemeToggleIcon compact />
+            <Link to="/claim" className="btn-ghost flex items-center gap-1.5 !py-2 !px-2.5 !text-xs sm:!px-3"><PlusIcon className="h-3.5 w-3.5" /><span className="hidden sm:inline">Add device</span></Link>
             {user && (
-              <div className="hidden items-center gap-2 rounded-xl border border-forest/5 bg-surface px-3 py-1.5 sm:flex">
-                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
+              <div className="hidden items-center gap-2 rounded-xl border border-forest/5 bg-surface px-2.5 py-1.5 md:flex">
+                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
                   {(user.displayName || user.email || 'U')[0].toUpperCase()}
                 </div>
-                <span className="max-w-[120px] truncate text-xs text-forest-400">{user.displayName || user.email || 'Account'}</span>
+                <span className="max-w-[100px] truncate text-xs text-forest-400">{user.displayName || user.email || 'Account'}</span>
               </div>
             )}
-            <Link to="/claim" className="btn-ghost flex items-center gap-1.5 !py-2 !px-3 !text-xs"><PlusIcon className="h-3.5 w-3.5" /><span className="hidden sm:inline">Add device</span></Link>
-            <button onClick={() => signOut()} className="btn-ghost flex items-center gap-1.5 !py-2 !px-3 !text-xs text-forest/45 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400"><LogoutIcon className="h-3.5 w-3.5" /><span className="hidden sm:inline">Sign out</span></button>
+            <button onClick={() => signOut()} className="btn-ghost flex items-center gap-1.5 !py-2 !px-2.5 !text-xs text-forest/45 hover:text-red-500 sm:!px-3 dark:text-slate-400 dark:hover:text-red-400"><LogoutIcon className="h-3.5 w-3.5" /><span className="hidden sm:inline">Sign out</span></button>
           </div>
         </motion.header>
 
@@ -891,8 +921,6 @@ export function DashboardPage() {
             )}
           </>
         )}
-
-        <BottomTabBar activeTab={activeTab} onTabChange={setActiveTab} />
 
         {/* Edit plant modal */}
         {editModalOpen && (

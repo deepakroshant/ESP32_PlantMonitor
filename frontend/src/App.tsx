@@ -44,11 +44,19 @@ function App() {
   return (
     <BrowserRouter>
       <AnimatedRoutes />
-      {/* Floating theme toggle - always visible so users can switch light/dark mode */}
-      <div className="fixed bottom-4 right-4 z-40">
-        <ThemeToggleIcon />
-      </div>
+      {/* Theme toggle for Login (no header) — fixed top-right */}
+      <ThemeToggleForLogin />
     </BrowserRouter>
+  )
+}
+
+function ThemeToggleForLogin() {
+  const location = useLocation()
+  if (location.pathname !== '/login') return null
+  return (
+    <div className="fixed top-4 right-4 z-50">
+      <ThemeToggleIcon compact />
+    </div>
   )
 }
 
