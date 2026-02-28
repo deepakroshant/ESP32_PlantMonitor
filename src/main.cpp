@@ -130,7 +130,7 @@ void loadFirebaseFromNVSAndApply();
 // Block guest/captive-portal WiFi — these block NTP, Firebase, and break the device
 // -----------------------------------------------------------------------------
 static const char* const BLOCKED_SSIDS[] = {
-  "ubcvisitor", "ubc-guest", "ubc secure", "ubcsecure",  // UBC captive
+  "ubcvisitor", "ubc visitor", "ubc-guest", "ubc secure", "ubcsecure",  // UBC captive
   "xfinitywifi", "xfinity",
   "attwifi", "att-wifi",
   "starbucks", "starbucks_guest", "starbucks-guest",
@@ -178,7 +178,7 @@ void setup() {
   digitalWrite(RELAY_PIN, HIGH);
 
   Serial.println("\n========================================");
-  Serial.println("Smart Plant Pro – Firebase RTDB");
+  Serial.println("Smart Plant Pro – Firebase RTDB (v2 WiFi-block)");
   Serial.println("========================================\n");
 
   initializeHardware();
@@ -374,11 +374,15 @@ void setup() {
     ESP.restart();
   }
 
-  // Block guest/captive-portal WiFi — they block NTP & Firebase and break the device
+  // Block guest/captive-portal WiFi — run immediately after connect
   {
-    const char* ssid = WiFi.SSID().c_str();
-    if (isBlockedSSID(ssid)) {
-      clearBadWiFiAndRestart("ERROR: This network is not supported (guest/captive portal). Use a standard home/office WiFi.");
+    String ssidStr = WiFi.SSID();
+    if (ssidStr.length() > 0) {
+      ssidStr.trim();
+      Serial.printf("[WiFi] Connected to: \"%s\"\n", ssidStr.c_str());
+      if (isBlockedSSID(ssidStr.c_str())) {
+        clearBadWiFiAndRestart("ERROR: Guest/captive network not supported. Use home/office WiFi.");
+      }
     }
   }
 
@@ -407,7 +411,8 @@ void setup() {
   Serial.print("Waiting for NTP");
   time_t now = time(nullptr);
   int ntpRetries = 0;
-  while (now < 1000000000L && ntpRetries < 40) {
+  const int NTP_MAX_RETRIES = 15;  // ~3 sec — fail fast on blocked networks
+  while (now < 1000000000L && ntpRetries < NTP_MAX_RETRIES) {
     delay(200);
     now = time(nullptr);
     ntpRetries++;
@@ -417,8 +422,9 @@ void setup() {
   if (now >= 1000000000L) {
     Serial.printf("NTP synced: %ld\n", (long)now);
   } else {
-    // NTP failed = network likely blocks outbound (captive portal, guest WiFi, firewall)
-    clearBadWiFiAndRestart("ERROR: This network blocks internet access (NTP failed). Use a standard home/office WiFi.");
+    // NTP failed = network blocks outbound (captive portal, guest WiFi)
+    Serial.println("NTP failed — clearing WiFi and restarting.");
+    clearBadWiFiAndRestart("ERROR: This network blocks internet access. Use a standard home/office WiFi.");
   }
 
   deviceId = WiFi.macAddress(); // e.g. "24:6F:28:AA:BB:CC"
@@ -731,9 +737,13 @@ String healthStatus(const SensorState &s) {
   return "OK";
 }
 
+// Threshold: after this many SSL/connection failures or "not ready" cycles, reset WiFi
+static const int SSL_FAIL_THRESHOLD = 15;  // ~15–45 s of no success → clear WiFi and restart
+
 void taskFirebaseSync(void *pv) {
   const TickType_t fastPeriod = pdMS_TO_TICKS(RESET_POLL_MS);  // 1 s — reset check + loop rate
   static int cycleCount = 0;
+  static int sslFailStreak = 0;
 
   Serial.println("[Sync] Waiting for first sensor reading...");
   while (!gSensorReady) {
@@ -758,7 +768,13 @@ void taskFirebaseSync(void *pv) {
 
     bool fbReady = Firebase.ready();
     if (!fbReady) {
-      if (doFullSync) Serial.println("[Sync] Firebase not ready, skipping this cycle.");
+      if (doFullSync) {
+        sslFailStreak++;
+        if (sslFailStreak >= SSL_FAIL_THRESHOLD) {
+          clearBadWiFiAndRestart("ERROR: Firebase/SSL failing (network blocks HTTPS). Resetting WiFi.");
+        }
+        Serial.println("[Sync] Firebase not ready, skipping this cycle.");
+      }
       vTaskDelay(fastPeriod);
       continue;
     }
@@ -784,9 +800,18 @@ void taskFirebaseSync(void *pv) {
 
       if (!Firebase.RTDB.updateNode(&fbClient, readingsPath().c_str(), &json)) {
         syncFailCount++;
+        String err = fbClient.errorReason();
         Serial.print("[Sync] RTDB update FAILED: ");
-        Serial.println(fbClient.errorReason());
+        Serial.println(err);
+        // SSL/connection errors → likely captive portal or blocked HTTPS
+        if (err.indexOf("ssl") >= 0 || err.indexOf("SSL") >= 0 || err.indexOf("closed") >= 0 || err.indexOf("connection") >= 0) {
+          sslFailStreak++;
+          if (sslFailStreak >= SSL_FAIL_THRESHOLD) {
+            clearBadWiFiAndRestart("ERROR: SSL/connection errors (network blocks HTTPS). Resetting WiFi.");
+          }
+        }
       } else {
+        sslFailStreak = 0;  // Success → reset streak
         syncCount++;
         firstPushDone = true;
         if (syncCount <= 5 || syncCount % 20 == 0) {
