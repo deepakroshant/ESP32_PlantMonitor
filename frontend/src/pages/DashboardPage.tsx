@@ -21,6 +21,8 @@ import { fadeSlideUp, fadeScale } from '../lib/motion'
 import { CollapsibleSection } from '../components/CollapsibleSection'
 import { ConfirmDestructiveButton } from '../components/ConfirmDestructiveButton'
 import { ThemeToggleIcon } from '../components/icons/ThemeToggleIcon'
+import { sanitizeString, sanitizeEmail, sanitizeInt, sanitizeNumber } from '../utils/sanitize'
+import { useRateLimit } from '../hooks/useRateLimit'
 
 export type DashboardTab = 'dashboard' | 'settings'
 
@@ -99,6 +101,8 @@ export function DashboardPage() {
   const lastNotifiedAtRef = useRef(0)
   const prevStatusRef = useRef<DeviceStatus>('no_data')
   const appUrl = typeof window !== 'undefined' ? window.location.origin : ''
+  const [canInvite, rateLimitedInvite] = useRateLimit(10000)   // 10s between invites
+  const [canWater, rateLimitedWater] = useRateLimit(8000)      // 8s (in addition to pumpCooldown)
 
   // ── Firebase listeners ──
 
@@ -259,8 +263,8 @@ export function DashboardPage() {
   // ── Handlers ──
 
   function handleSaveTarget() {
-    const n = parseInt(targetSoilInput, 10)
-    if (isNaN(n) || n < 0) return
+    const n = sanitizeInt(targetSoilInput, 0, 4095, -1)
+    if (n < 0) return
     set(ref(firebaseDb, `devices/${selectedMac}/control/targetSoil`), n).catch(console.error)
     setTargetSoil(n)
   }
@@ -286,19 +290,28 @@ export function DashboardPage() {
 
   async function handleSaveSchedule() {
     if (!selectedMac) return
+    const hour = sanitizeInt(scheduleInput.hour, 0, 23, 8)
+    const minute = sanitizeInt(scheduleInput.minute, 0, 59, 0)
+    const hysteresis = sanitizeInt(scheduleInput.hysteresis, 0, 2000, 200)
+    const maxSecondsPerDay = sanitizeInt(scheduleInput.maxSecondsPerDay, 10, 600, 120)
+    const cooldownMinutes = sanitizeInt(scheduleInput.cooldownMinutes, 5, 1440, 30)
     await set(ref(firebaseDb, `devices/${selectedMac}/control/schedule/enabled`), scheduleInput.enabled).catch(console.error)
-    await set(ref(firebaseDb, `devices/${selectedMac}/control/schedule/hour`), Math.max(0, Math.min(23, scheduleInput.hour))).catch(console.error)
-    await set(ref(firebaseDb, `devices/${selectedMac}/control/schedule/minute`), Math.max(0, Math.min(59, scheduleInput.minute))).catch(console.error)
-    await set(ref(firebaseDb, `devices/${selectedMac}/control/schedule/hysteresis`), Math.max(0, Math.min(2000, scheduleInput.hysteresis))).catch(console.error)
-    await set(ref(firebaseDb, `devices/${selectedMac}/control/schedule/maxSecondsPerDay`), Math.max(10, Math.min(600, scheduleInput.maxSecondsPerDay))).catch(console.error)
-    await set(ref(firebaseDb, `devices/${selectedMac}/control/schedule/cooldownMinutes`), Math.max(5, Math.min(1440, scheduleInput.cooldownMinutes))).catch(console.error)
-    setSchedule((prev) => ({ ...prev, ...scheduleInput }))
+    await set(ref(firebaseDb, `devices/${selectedMac}/control/schedule/hour`), hour).catch(console.error)
+    await set(ref(firebaseDb, `devices/${selectedMac}/control/schedule/minute`), minute).catch(console.error)
+    await set(ref(firebaseDb, `devices/${selectedMac}/control/schedule/hysteresis`), hysteresis).catch(console.error)
+    await set(ref(firebaseDb, `devices/${selectedMac}/control/schedule/maxSecondsPerDay`), maxSecondsPerDay).catch(console.error)
+    await set(ref(firebaseDb, `devices/${selectedMac}/control/schedule/cooldownMinutes`), cooldownMinutes).catch(console.error)
+    setSchedule((prev) => ({ ...prev, ...scheduleInput, hour, minute, hysteresis, maxSecondsPerDay, cooldownMinutes }))
   }
 
   async function handleSaveDeviceMeta(mac: string, meta: DeviceMeta) {
     if (!user) return
-    await set(ref(firebaseDb, `users/${user.uid}/devices/${mac}/meta`), meta).catch(console.error)
-    setDevicesMeta((prev) => ({ ...prev, [mac]: meta }))
+    const safe: DeviceMeta = {
+      name: meta.name ? sanitizeString(meta.name, 80) : undefined,
+      room: meta.room ? sanitizeString(meta.room, 80) : undefined,
+    }
+    await set(ref(firebaseDb, `users/${user.uid}/devices/${mac}/meta`), safe).catch(console.error)
+    setDevicesMeta((prev) => ({ ...prev, [mac]: safe }))
   }
 
   async function handleCopyUrl() {
@@ -308,10 +321,13 @@ export function DashboardPage() {
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault()
-    const email = inviteEmail.trim().toLowerCase()
+    const email = sanitizeEmail(inviteEmail)
     if (!email || !user) return
-    await set(ref(firebaseDb, `users/${user.uid}/invites/${email.replace(/[.#$[\]]/g, '_')}`), { email, at: Date.now() }).catch(console.error)
-    setInviteEmail('')
+    await rateLimitedInvite(async () => {
+      const safeKey = email.replace(/[.#$[\]]/g, '_')
+      await set(ref(firebaseDb, `users/${user.uid}/invites/${safeKey}`), { email, at: Date.now() }).catch(console.error)
+      setInviteEmail('')
+    })
   }
 
   function openEditPlant(profileId: string | null) {
@@ -342,8 +358,8 @@ export function DashboardPage() {
   }
 
   async function saveEditPlant(andLinkToDevice: boolean) {
-    const name = editForm.name.trim()
-    const type = editForm.type.trim()
+    const name = sanitizeString(editForm.name, 80)
+    const type = sanitizeString(editForm.type, 60)
     if (!name || !user) return
     const now = Date.now()
     const profilePayload: PlantProfile = {
@@ -351,17 +367,29 @@ export function DashboardPage() {
       type: type || '—',
       createdAt: profiles[editingProfileId ?? '']?.createdAt ?? now,
     }
-    if (editForm.soilMin != null && editForm.soilMax != null && !Number.isNaN(editForm.soilMin) && !Number.isNaN(editForm.soilMax)) {
-      profilePayload.soilMin = editForm.soilMin
-      profilePayload.soilMax = editForm.soilMax
+    if (editForm.soilMin != null && editForm.soilMax != null) {
+      const smin = sanitizeNumber(editForm.soilMin, 0, 4095)
+      const smax = sanitizeNumber(editForm.soilMax, 0, 4095)
+      if (!Number.isNaN(smin) && !Number.isNaN(smax)) {
+        profilePayload.soilMin = Math.round(smin)
+        profilePayload.soilMax = Math.round(smax)
+      }
     }
-    if (editForm.tempMin != null && editForm.tempMax != null && !Number.isNaN(editForm.tempMin) && !Number.isNaN(editForm.tempMax)) {
-      profilePayload.tempMin = editForm.tempMin
-      profilePayload.tempMax = editForm.tempMax
+    if (editForm.tempMin != null && editForm.tempMax != null) {
+      const tmin = sanitizeNumber(editForm.tempMin, -40, 80)
+      const tmax = sanitizeNumber(editForm.tempMax, -40, 80)
+      if (!Number.isNaN(tmin) && !Number.isNaN(tmax)) {
+        profilePayload.tempMin = Math.round(tmin)
+        profilePayload.tempMax = Math.round(tmax)
+      }
     }
-    if (editForm.humidityMin != null && editForm.humidityMax != null && !Number.isNaN(editForm.humidityMin) && !Number.isNaN(editForm.humidityMax)) {
-      profilePayload.humidityMin = editForm.humidityMin
-      profilePayload.humidityMax = editForm.humidityMax
+    if (editForm.humidityMin != null && editForm.humidityMax != null) {
+      const hmin = sanitizeNumber(editForm.humidityMin, 0, 100)
+      const hmax = sanitizeNumber(editForm.humidityMax, 0, 100)
+      if (!Number.isNaN(hmin) && !Number.isNaN(hmax)) {
+        profilePayload.humidityMin = Math.round(hmin)
+        profilePayload.humidityMax = Math.round(hmax)
+      }
     }
     if (editForm.lightPreference && editForm.lightPreference !== 'any') {
       profilePayload.lightPreference = editForm.lightPreference
@@ -409,8 +437,11 @@ export function DashboardPage() {
 
   async function handleTriggerPump() {
     if (!selectedMac || pumpCooldown) return
-    await set(ref(firebaseDb, `devices/${selectedMac}/control/pumpRequest`), true).catch(console.error)
-    setPumpCooldown(true); setTimeout(() => setPumpCooldown(false), 8000)
+    await rateLimitedWater(async () => {
+      await set(ref(firebaseDb, `devices/${selectedMac}/control/pumpRequest`), true).catch(console.error)
+      setPumpCooldown(true)
+      setTimeout(() => setPumpCooldown(false), 8000)
+    })
   }
 
   async function handleAckAlert() { if (!selectedMac) return; await set(ref(firebaseDb, `devices/${selectedMac}/alerts/lastAlert/ackAt`), Math.floor(Date.now() / 1000)).catch(console.error); setLastAlert(null) }
@@ -432,7 +463,8 @@ export function DashboardPage() {
 
   async function addNewProfile(e: React.FormEvent) {
     e.preventDefault()
-    const name = newProfileName.trim(); const type = newProfileType.trim()
+    const name = sanitizeString(newProfileName, 80)
+    const type = sanitizeString(newProfileType, 60)
     if (!name || !user) return
     const newRef = push(ref(firebaseDb, `users/${user.uid}/plantProfiles`)); const id = newRef.key; if (!id) return
     await set(newRef, { name, type: type || '—', createdAt: Date.now() }).catch(console.error)
@@ -699,8 +731,8 @@ export function DashboardPage() {
                   <p className="text-sm font-semibold text-forest dark:text-slate-100">Water pump</p>
                   <p className="mt-0.5 text-xs text-forest-400 dark:text-slate-400">{pumpActive ? 'Pump is running…' : 'Manual watering pulse'}</p>
                 </div>
-                <button type="button" onClick={handleTriggerPump} disabled={pumpCooldown || dataUntrusted} className={`shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all ${pumpActive ? 'bg-primary/12 text-primary ring-1 ring-primary/20' : pumpCooldown ? 'bg-forest/5 text-forest/30' : 'btn-primary !rounded-xl'} disabled:opacity-50`}>
-                  {pumpActive ? 'Running…' : pumpCooldown ? 'Sent ✓' : 'Water now'}
+                <button type="button" onClick={handleTriggerPump} disabled={pumpCooldown || !canWater || dataUntrusted} className={`shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-all ${pumpActive ? 'bg-primary/12 text-primary ring-1 ring-primary/20' : pumpCooldown || !canWater ? 'bg-forest/5 text-forest/30' : 'btn-primary !rounded-xl'} disabled:opacity-50 disabled:cursor-not-allowed`}>
+                  {pumpActive ? 'Running…' : pumpCooldown || !canWater ? 'Sent ✓' : 'Water now'}
                 </button>
               </motion.div>
 
@@ -911,7 +943,7 @@ export function DashboardPage() {
                   </div>
                   <form onSubmit={handleInvite} className="mb-2 flex flex-wrap items-center gap-2">
                     <input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="Email to add to invite list" className="input-field" />
-                    <button type="submit" className="btn-primary">Invite</button>
+                    <button type="submit" disabled={!canInvite} className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed">Invite</button>
                   </form>
                   {invitedList.length > 0 && <p className="text-xs text-forest/40">Invited: {invitedList.join(', ')}</p>}
                 </CollapsibleSection>

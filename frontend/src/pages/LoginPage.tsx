@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { useAuth } from '../context/AuthContext'
 import { fadeSlideUp, staggerContainer, transition } from '../lib/motion'
 import { PlantIcon } from '../components/icons/PlantIcon'
+import { sanitizeEmail } from '../utils/sanitize'
 
 export function LoginPage() {
   const [email, setEmail] = useState('')
@@ -19,10 +20,23 @@ export function LoginPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    const safeEmail = sanitizeEmail(email)
+    if (!safeEmail) {
+      setError('Please enter a valid email address')
+      return
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters')
+      return
+    }
+    if (password.length > 128) {
+      setError('Password too long')
+      return
+    }
     setLoading(true)
     try {
-      if (isSignUp) await signUp(email, password)
-      else await signIn(email, password)
+      if (isSignUp) await signUp(safeEmail, password)
+      else await signIn(safeEmail, password)
       navigate(from, { replace: true })
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Auth failed')

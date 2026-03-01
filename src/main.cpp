@@ -70,7 +70,6 @@ static const char* PREF_PW = "pw";
 // Firebase globals
 // -----------------------------------------------------------------------------
 FirebaseData fbClient;
-FirebaseData fbStream;
 FirebaseAuth fbAuth;
 FirebaseConfig fbConfig;
 
@@ -120,9 +119,8 @@ String readingsPath();
 String healthStatus(const SensorState &s);
 uint16_t fetchTargetSoil();
 bool fetchResetProvisioning();
-void streamCallback(FirebaseStream data);
 void taskScheduleCheck();
-void streamTimeoutCallback(bool timeout);
+bool fetchPumpRequest();
 void clearFirebaseNVS();
 void loadFirebaseFromNVSAndApply();
 
@@ -411,7 +409,7 @@ void setup() {
   Serial.print("Waiting for NTP");
   time_t now = time(nullptr);
   int ntpRetries = 0;
-  const int NTP_MAX_RETRIES = 15;  // ~3 sec — fail fast on blocked networks
+  const int NTP_MAX_RETRIES = 50;  // ~10 sec — hotspots need more time to route traffic
   while (now < 1000000000L && ntpRetries < NTP_MAX_RETRIES) {
     delay(200);
     now = time(nullptr);
@@ -422,7 +420,6 @@ void setup() {
   if (now >= 1000000000L) {
     Serial.printf("NTP synced: %ld\n", (long)now);
   } else {
-    // NTP failed = network blocks outbound (captive portal, guest WiFi)
     Serial.println("NTP failed — clearing WiFi and restarting.");
     clearBadWiFiAndRestart("ERROR: This network blocks internet access. Use a standard home/office WiFi.");
   }
@@ -462,15 +459,7 @@ void setup() {
   gStateMutex = xSemaphoreCreateMutex();
   gFirebaseMutex = xSemaphoreCreateMutex();
 
-  // Stream listener for pumpRequest
-  String streamPath = "devices/" + deviceId + "/control/pumpRequest";
-  Firebase.RTDB.setStreamCallback(&fbStream, streamCallback, streamTimeoutCallback);
-  if (!Firebase.RTDB.beginStream(&fbStream, streamPath.c_str())) {
-    Serial.print("Stream begin failed: ");
-    Serial.println(fbStream.errorReason());
-  } else {
-    Serial.println("Firebase stream started.");
-  }
+  Serial.println("Firebase polling mode (no stream).");
 
   // Create tasks
   // Run networking/Firebase work on Core 1 so the Core 0 idle task
@@ -874,8 +863,24 @@ void taskFirebaseSync(void *pv) {
     // App set devices/<MAC>/control/resetProvisioning = true → clear WiFi, reboot.
     // CRITICAL: clear the flag in Firebase BEFORE resetting, otherwise the device
     // will find it still true on next boot and enter an infinite reset loop.
-    // No grace period — when user clicks Reset, we act immediately (within 1–2 s).
-    if (Firebase.ready() && fetchResetProvisioning()) {
+    // Grace period: ignore stale flags for 15 s after boot so a leftover flag
+    // from a failed previous clear doesn't cause an instant reset loop.
+    static bool resetGracePassed = false;
+    static bool staleCleared = false;
+    if (!resetGracePassed) {
+      // During grace period, silently clear any leftover flag from a previous crash
+      if (!staleCleared && Firebase.ready() && fetchResetProvisioning()) {
+        String stalePath = "devices/" + deviceId + "/control/resetProvisioning";
+        if (xSemaphoreTake(gFirebaseMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+          Firebase.RTDB.setBool(&fbClient, stalePath.c_str(), false);
+          xSemaphoreGive(gFirebaseMutex);
+        }
+        staleCleared = true;
+        Serial.println("[Reset] Cleared stale resetProvisioning flag from previous session.");
+      }
+      if (millis() > 15000) resetGracePassed = true;
+    }
+    if (resetGracePassed && Firebase.ready() && fetchResetProvisioning()) {
       String path = "devices/" + deviceId + "/control/resetProvisioning";
       bool cleared = false;
       for (int attempt = 1; attempt <= 5 && !cleared; attempt++) {
@@ -907,8 +912,30 @@ void taskFirebaseSync(void *pv) {
       }
     }
 
+    // Poll pumpRequest every cycle (~1 s) instead of using Firebase stream
+    // (streams caused FreeRTOS mutex crashes on ESP32)
+    if (Firebase.ready()) {
+      bool req = fetchPumpRequest();
+      if (req && !gPumpRequest) {
+        gPumpReason = 0;  // manual
+        gPumpRequest = true;
+        Serial.println("[Poll] pumpRequest=true (manual)");
+      } else if (!req && gPumpRequest) {
+        gPumpRequest = false;
+      }
+    }
+
     vTaskDelay(fastPeriod);
   }
+}
+
+bool fetchPumpRequest() {
+  String path = "devices/" + deviceId + "/control/pumpRequest";
+  if (xSemaphoreTake(gFirebaseMutex, pdMS_TO_TICKS(500)) != pdTRUE) return false;
+  bool ok = Firebase.RTDB.getBool(&fbClient, path.c_str());
+  bool val = ok && fbClient.boolData();
+  xSemaphoreGive(gFirebaseMutex);
+  return val;
 }
 
 // -----------------------------------------------------------------------------
@@ -1106,22 +1133,4 @@ void taskPumpControl(void *pv) {
   }
 }
 
-// -----------------------------------------------------------------------------
-// Firebase stream callbacks
-// -----------------------------------------------------------------------------
-void streamCallback(FirebaseStream data) {
-  gPumpReason = 0;  // manual
-  if (data.dataType() == "boolean") {
-    gPumpRequest = data.boolData();
-  } else if (data.dataType() == "int") {
-    gPumpRequest = (data.intData() != 0);
-  }
-  Serial.print("pumpRequest updated from stream: ");
-  Serial.println(gPumpRequest ? "true" : "false");
-}
-
-void streamTimeoutCallback(bool timeout) {
-  if (timeout) {
-    Serial.println("Firebase stream timeout, resuming...");
-  }
-}
+// (Stream callbacks removed — using polling to avoid FreeRTOS mutex crash)

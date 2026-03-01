@@ -6,6 +6,8 @@ import { firebaseDb } from '../lib/firebase'
 import { useAuth } from '../context/AuthContext'
 import { fadeSlideUp, staggerContainer, transition } from '../lib/motion'
 import { ThemeToggleIcon } from '../components/icons/ThemeToggleIcon'
+import { sanitizeMac, sanitizeString } from '../utils/sanitize'
+import { useRateLimit } from '../hooks/useRateLimit'
 
 const ONLINE_THRESHOLD_SEC = 2 * 60
 
@@ -25,6 +27,7 @@ export function ClaimDevicePage() {
   const [devices, setDevices] = useState<DeviceEntry[]>([])
   const { user } = useAuth()
   const navigate = useNavigate()
+  const [canClaim, rateLimitedClaim, claimCooldown] = useRateLimit(5000)  // 5s between claims
 
   useEffect(() => {
     const deviceListRef = ref(firebaseDb, 'deviceList')
@@ -45,28 +48,31 @@ export function ClaimDevicePage() {
   }, [])
 
   async function handleClaim(macToClaim: string) {
-    setError(''); setSuccess('')
-    const normalized = macToClaim.trim().toUpperCase().replace(/-/g, ':')
-    if (!normalized.match(/^([0-9A-F]{2}:){5}[0-9A-F]{2}$/)) {
-      setError('Invalid MAC address format'); return
-    }
-    if (!user) return
-    try {
-      const userDevicesPath = `users/${user.uid}/devices/${normalized}`
-      const existing = await get(ref(firebaseDb, userDevicesPath))
-      if (existing.exists()) {
-        setSuccess('Device already claimed.')
-        setTimeout(() => navigate('/'), 1500)
+    await rateLimitedClaim(async () => {
+      setError(''); setSuccess('')
+      const normalized = sanitizeMac(macToClaim)
+      if (!normalized) {
+        setError('Invalid MAC address format (use XX:XX:XX:XX:XX:XX)')
         return
       }
-      await set(ref(firebaseDb, userDevicesPath), { claimedAt: Date.now() })
-      await set(ref(firebaseDb, `deviceList/${normalized}/claimedBy`), user.uid)
-      setSuccess('Device claimed!')
-      setJustClaimedMac(normalized)
-      setMac('')
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Claim failed')
-    }
+      if (!user) return
+      try {
+        const userDevicesPath = `users/${user.uid}/devices/${normalized}`
+        const existing = await get(ref(firebaseDb, userDevicesPath))
+        if (existing.exists()) {
+          setSuccess('Device already claimed.')
+          setTimeout(() => navigate('/'), 1500)
+          return
+        }
+        await set(ref(firebaseDb, userDevicesPath), { claimedAt: Date.now() })
+        await set(ref(firebaseDb, `deviceList/${normalized}/claimedBy`), user.uid)
+        setSuccess('Device claimed!')
+        setJustClaimedMac(normalized)
+        setMac('')
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'Claim failed')
+      }
+    })
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -76,7 +82,10 @@ export function ClaimDevicePage() {
 
   async function handleSaveNameAndGo() {
     if (!user || !justClaimedMac) return
-    const meta = { name: claimName.trim() || undefined, room: claimRoom.trim() || undefined }
+    const meta = {
+      name: sanitizeString(claimName, 80) || undefined,
+      room: sanitizeString(claimRoom, 80) || undefined,
+    }
     if (meta.name || meta.room) {
       await set(ref(firebaseDb, `users/${user.uid}/devices/${justClaimedMac}/meta`), meta).catch(console.error)
     }
@@ -181,8 +190,13 @@ export function ClaimDevicePage() {
                         <span className="text-[11px] text-forest/35">Claimed</span>
                       )}
                       {isAvailable && (
-                        <button type="button" onClick={() => handleClaim(d.mac)} className="btn-primary !py-1.5 !px-3 !text-xs">
-                          Claim
+                        <button
+                          type="button"
+                          onClick={() => handleClaim(d.mac)}
+                          disabled={!canClaim}
+                          className="btn-primary !py-1.5 !px-3 !text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {canClaim ? 'Claim' : `Wait ${Math.ceil(claimCooldown / 1000)}s`}
                         </button>
                       )}
                     </div>
@@ -249,7 +263,13 @@ export function ClaimDevicePage() {
               <p className="text-sm font-medium text-primary" role="status">{success}</p>
             )}
             <div className="flex gap-2">
-              <button type="submit" className="btn-primary">Claim</button>
+              <button
+                type="submit"
+                disabled={!canClaim}
+                className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {canClaim ? 'Claim' : `Wait ${Math.ceil(claimCooldown / 1000)}s`}
+              </button>
               <button type="button" onClick={() => navigate('/')} className="btn-ghost">Cancel</button>
             </div>
           </form>
