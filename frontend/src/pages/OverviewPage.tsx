@@ -8,6 +8,8 @@ import type { Readings, DeviceMeta, DeviceStatus } from '../types'
 import { LogoutIcon } from '../components/icons/LogoutIcon'
 import { PlantIcon } from '../components/icons/PlantIcon'
 import { ThemeToggleIcon } from '../components/icons/ThemeToggleIcon'
+import { RotatingText } from '../components/ui/rotating-text'
+import ScrollStack, { ScrollStackItem } from '../components/ui/ScrollStack'
 
 const STORAGE_KEY = 'smart-plant-selected-device'
 
@@ -157,70 +159,117 @@ export function OverviewPage() {
 
       <main className="px-4 py-6 sm:px-6 sm:py-8">
         {myDevices.length === 0 ? (
-          <div className="rounded-2xl border border-forest/10 bg-white p-8 text-center">
-            <p className="text-forest/60">No devices yet. Claim one to get started.</p>
+          <div className="rounded-2xl border border-forest/10 bg-white p-8 text-center dark:border-forest-700 dark:bg-forest-800/80">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
+              <PlantIcon className="h-8 w-8 text-primary" />
+            </div>
+            <h2 className="mb-2 font-display text-xl font-bold text-forest dark:text-forest-100">
+              <RotatingText
+                words={["Ready", "Set", "Let's"]}
+                mode="slide"
+                interval={2000}
+                className="text-primary"
+              />{" "}
+              get started
+            </h2>
+            <p className="mb-6 text-forest/60 dark:text-forest-400">
+              No devices yet. Claim one to begin{" "}
+              <RotatingText
+                words={["monitoring", "tracking", "caring"]}
+                mode="fade"
+                interval={2500}
+                className="font-medium text-primary"
+              />{" "}
+              your plants.
+            </p>
             <Link
               to="/claim"
-              className="mt-4 inline-block rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary/90"
+              className="inline-block rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary/90"
             >
               Claim device
             </Link>
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {myDevices.map((mac) => {
-              const data = deviceData[mac] ?? { readings: null, lastWateredEpoch: null, lastAlert: null }
-              const status = getDeviceStatus(
-                data.readings,
-                Math.floor(Date.now() / 1000),
-                resetRequestedAt
-              ) as DeviceStatus
-              const meta = STATUS_META[status]
-              const soil = data.readings?.soilRaw != null ? String(data.readings.soilRaw) : '—'
+          <div className="h-[calc(100vh-120px)] overflow-hidden rounded-2xl">
+            <ScrollStack
+              className="h-full"
+              itemDistance={120}
+              itemScale={0.04}
+              itemStackDistance={40}
+              stackPosition="15%"
+              scaleEndPosition="5%"
+              baseScale={0.88}
+              rotationAmount={2}
+              blurAmount={1.5}
+              useWindowScroll={false}
+            >
+              {myDevices.map((mac) => {
+                const data = deviceData[mac] ?? { readings: null, lastWateredEpoch: null, lastAlert: null }
+                const status = getDeviceStatus(
+                  data.readings,
+                  Math.floor(Date.now() / 1000),
+                  resetRequestedAt
+                ) as DeviceStatus
+                const meta = STATUS_META[status]
+                const soil = data.readings?.soilRaw != null ? String(data.readings.soilRaw) : '—'
+                const temp = data.readings?.temperature != null ? `${data.readings.temperature.toFixed(1)}°C` : '—'
 
-              return (
-                <button
-                  key={mac}
-                  type="button"
-                  onClick={() => goToDevice(mac)}
-                  className={`group relative flex flex-col items-stretch rounded-2xl border p-5 text-left transition-all hover:shadow-lg ${meta.border} ${meta.bg}`}
-                >
-                  {data.lastAlert && (
-                    <span className="absolute right-3 top-3 rounded-full bg-terracotta/20 px-2 py-0.5 text-xs font-medium text-terracotta">
-                      Alert
-                    </span>
-                  )}
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/15">
-                      <PlantIcon className="h-6 w-6 text-primary" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h2 className="font-display font-bold text-forest truncate">
-                        {deviceLabel(mac, devicesMeta[mac])}
-                      </h2>
-                      <span
-                        className={`inline-flex items-center gap-1 text-xs font-medium ${meta.color}`}
-                      >
-                        <span
-                          className={`h-1.5 w-1.5 rounded-full ${meta.dotColor} ${meta.pulse ? 'animate-pulse' : ''}`}
-                        />
-                        {meta.label}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-3 border-t border-forest/5 pt-4">
-                    <span className="rounded-lg bg-forest/[0.04] px-2.5 py-1 text-xs font-medium tabular-nums text-forest-600">
-                      Soil {soil}
-                    </span>
-                    {data.lastWateredEpoch != null && data.lastWateredEpoch > 0 && (
-                      <span className="rounded-lg bg-sky-500/10 px-2.5 py-1 text-xs font-medium text-sky-700">
-                        Last watered {formatWateredAgo(data.lastWateredEpoch)}
-                      </span>
-                    )}
-                  </div>
-                </button>
-              )
-            })}
+                return (
+                  <ScrollStackItem
+                    key={mac}
+                    itemClassName="bg-white dark:bg-forest-800/90 border-2 border-forest/10 dark:border-forest-700 shadow-lg hover:shadow-xl transition-shadow cursor-pointer"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => goToDevice(mac)}
+                      className="w-full text-left"
+                    >
+                      {data.lastAlert && (
+                        <span className="absolute right-6 top-6 rounded-full bg-terracotta/20 px-3 py-1 text-xs font-semibold text-terracotta backdrop-blur-sm">
+                          Alert
+                        </span>
+                      )}
+                      <div className="flex items-start gap-4 mb-6">
+                        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-primary/15 shadow-glow ring-2 ring-primary/10">
+                          <PlantIcon className="h-8 w-8 text-primary" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h2 className="font-display text-2xl font-bold text-forest dark:text-forest-100 mb-2">
+                            {deviceLabel(mac, devicesMeta[mac])}
+                          </h2>
+                          <span
+                            className={`inline-flex items-center gap-2 text-sm font-medium ${meta.color}`}
+                          >
+                            <span
+                              className={`h-2 w-2 rounded-full ${meta.dotColor} ${meta.pulse ? 'animate-pulse' : ''}`}
+                            />
+                            {meta.label}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 pt-6 border-t border-forest/10 dark:border-forest-700">
+                        <div className="space-y-1">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-forest/40 dark:text-forest-500">Soil</p>
+                          <p className="text-xl font-mono font-bold text-forest dark:text-forest-100">{soil}</p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-semibold uppercase tracking-wider text-forest/40 dark:text-forest-500">Temperature</p>
+                          <p className="text-xl font-mono font-bold text-forest dark:text-forest-100">{temp}</p>
+                        </div>
+                        {data.lastWateredEpoch != null && data.lastWateredEpoch > 0 && (
+                          <div className="col-span-2 pt-2">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-forest/40 dark:text-forest-500 mb-1">Last Watered</p>
+                            <p className="text-sm font-medium text-sky-600 dark:text-sky-400">
+                              {formatWateredAgo(data.lastWateredEpoch)}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  </ScrollStackItem>
+                )
+              })}
+            </ScrollStack>
           </div>
         )}
       </main>

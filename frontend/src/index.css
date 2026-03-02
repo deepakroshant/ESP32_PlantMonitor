@@ -8,6 +8,80 @@
     --color-primary-light: #F2F8F5;
     --color-forest:        #1B2F27;
     --color-surface:       #FAFBFA;
+    
+    /* shadcn/ui color tokens */
+    --card: #f8f5f0;
+    --ring: #2e7d32;
+    --input: #e0d6c9;
+    --muted: #f0e9e0;
+    --accent: #c8e6c9;
+    --border: #e0d6c9;
+    --radius: 0.5rem;
+    --chart-1: #4caf50;
+    --chart-2: #388e3c;
+    --chart-3: #2e7d32;
+    --chart-4: #1b5e20;
+    --chart-5: #0a1f0c;
+    --popover: #f8f5f0;
+    --primary: #2e7d32;
+    --sidebar: #f0e9e0;
+    --font-mono: Source Code Pro, monospace;
+    --font-sans: Montserrat, sans-serif;
+    --secondary: #e8f5e9;
+    --background: #f8f5f0;
+    --font-serif: Merriweather, serif;
+    --foreground: #3e2723;
+    --destructive: #c62828;
+    --sidebar-ring: #2e7d32;
+    --sidebar-accent: #c8e6c9;
+    --sidebar-border: #e0d6c9;
+    --card-foreground: #3e2723;
+    --sidebar-primary: #2e7d32;
+    --muted-foreground: #6d4c41;
+    --accent-foreground: #1b5e20;
+    --popover-foreground: #3e2723;
+    --primary-foreground: #ffffff;
+    --sidebar-foreground: #3e2723;
+    --secondary-foreground: #1b5e20;
+    --destructive-foreground: #ffffff;
+    --sidebar-accent-foreground: #1b5e20;
+    --sidebar-primary-foreground: #ffffff;
+  }
+
+  .dark {
+    --card: #2d3a2e;
+    --ring: #4caf50;
+    --input: #3e4a3d;
+    --muted: #2d3a2e;
+    --accent: #388e3c;
+    --border: #3e4a3d;
+    --radius: 0.5rem;
+    --chart-1: #81c784;
+    --chart-2: #66bb6a;
+    --chart-3: #4caf50;
+    --chart-4: #43a047;
+    --chart-5: #388e3c;
+    --popover: #2d3a2e;
+    --primary: #4caf50;
+    --sidebar: #1c2a1f;
+    --secondary: #3e4a3d;
+    --background: #1c2a1f;
+    --foreground: #f0ebe5;
+    --destructive: #c62828;
+    --sidebar-ring: #4caf50;
+    --sidebar-accent: #388e3c;
+    --sidebar-border: #3e4a3d;
+    --card-foreground: #f0ebe5;
+    --sidebar-primary: #4caf50;
+    --muted-foreground: #d7cfc4;
+    --accent-foreground: #f0ebe5;
+    --popover-foreground: #f0ebe5;
+    --primary-foreground: #0a1f0c;
+    --sidebar-foreground: #f0ebe5;
+    --secondary-foreground: #d7e0d6;
+    --destructive-foreground: #f0ebe5;
+    --sidebar-accent-foreground: #f0ebe5;
+    --sidebar-primary-foreground: #0a1f0c;
   }
 
   html {
@@ -34,6 +108,46 @@
       radial-gradient(ellipse 80% 50% at 50% -10%, rgba(59,122,87,0.08) 0%, transparent 65%),
       radial-gradient(ellipse 55% 40% at 85% 85%, rgba(27,47,39,0.15) 0%, transparent 55%);
     color: #e2e8e5;
+  }
+  
+  /* shadcn/ui theme variables mapping */
+  @theme inline {
+    --color-card: var(--card);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-muted: var(--muted);
+    --color-accent: var(--accent);
+    --color-border: var(--border);
+    --color-radius: var(--radius);
+    --color-chart-1: var(--chart-1);
+    --color-chart-2: var(--chart-2);
+    --color-chart-3: var(--chart-3);
+    --color-chart-4: var(--chart-4);
+    --color-chart-5: var(--chart-5);
+    --color-popover: var(--popover);
+    --color-primary: var(--primary);
+    --color-sidebar: var(--sidebar);
+    --color-font-mono: var(--font-mono);
+    --color-font-sans: var(--font-sans);
+    --color-secondary: var(--secondary);
+    --color-background: var(--background);
+    --color-font-serif: var(--font-serif);
+    --color-foreground: var(--foreground);
+    --color-destructive: var(--destructive);
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-card-foreground: var(--card-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
   }
 
   ::selection {

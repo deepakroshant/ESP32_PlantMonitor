@@ -8,6 +8,7 @@ import { fadeSlideUp, staggerContainer, transition } from '../lib/motion'
 import { ThemeToggleIcon } from '../components/icons/ThemeToggleIcon'
 import { sanitizeMac, sanitizeString } from '../utils/sanitize'
 import { useRateLimit } from '../hooks/useRateLimit'
+import { RotatingText } from '../components/ui/rotating-text'
 
 const ONLINE_THRESHOLD_SEC = 2 * 60
 
@@ -112,10 +113,22 @@ export function ClaimDevicePage() {
         >
           <div>
             <h1 className="font-display text-2xl font-bold tracking-tight text-forest">
-              Add device
+              <RotatingText
+                words={["Add", "Connect", "Claim"]}
+                mode="slide"
+                interval={3000}
+                className="text-primary"
+              />{" "}
+              device
             </h1>
             <p className="mt-1 text-sm text-forest-400">
-              Claim an ESP32 plant monitor to your account
+              <RotatingText
+                words={["Claim", "Connect", "Add"]}
+                mode="fade"
+                interval={3000}
+                className="font-medium text-primary"
+              />{" "}
+              an ESP32 plant monitor to your account
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -147,9 +160,15 @@ export function ClaimDevicePage() {
           </div>
 
           {devices.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-forest/10 bg-surface/60 p-8 text-center">
-              <p className="text-sm text-forest-400">
-                No devices found yet. Power on an ESP32 and wait for it to sync.
+            <div className="rounded-2xl border border-dashed border-forest/10 bg-surface/60 p-8 text-center dark:border-forest-700 dark:bg-forest-800/40">
+              <p className="text-sm text-forest-400 dark:text-forest-500">
+                <RotatingText
+                  words={["Searching", "Scanning", "Looking"]}
+                  mode="fade"
+                  interval={2000}
+                  className="font-medium text-primary"
+                />{" "}
+                for devices… Power on an ESP32 and wait for it to sync.
               </p>
             </div>
           ) : (

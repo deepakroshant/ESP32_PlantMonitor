@@ -1,0 +1,92 @@
+.scroll-stack-scroller {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: visible;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  will-change: scroll-position;
+}
+
+.scroll-stack-inner {
+  padding: 20vh 1.25rem 50rem;
+  min-height: 100vh;
+}
+
+@media (min-width: 640px) {
+  .scroll-stack-inner {
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .scroll-stack-inner {
+    padding-left: 5rem;
+    padding-right: 5rem;
+  }
+}
+
+.scroll-stack-card-wrapper {
+  position: relative;
+}
+
+.scroll-stack-card {
+  transform-origin: top center;
+  will-change: transform, filter;
+  backface-visibility: hidden;
+  transform-style: preserve-3d;
+  /* Smart Plant Pro design system shadows */
+  box-shadow: 
+    0 1px 2px rgba(27, 47, 39, 0.03),
+    0 4px 12px rgba(27, 47, 39, 0.05),
+    0 16px 32px rgba(27, 47, 39, 0.04);
+  width: 100%;
+  margin: 30px 0;
+  padding: 2rem;
+  border-radius: 1.5rem;
+  box-sizing: border-box;
+  /* Improve mobile performance */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  position: relative;
+  transition: box-shadow 0.3s ease;
+}
+
+.scroll-stack-card:hover {
+  box-shadow: 
+    0 2px 8px rgba(27, 47, 39, 0.06),
+    0 12px 28px rgba(27, 47, 39, 0.08),
+    0 24px 48px rgba(27, 47, 39, 0.06);
+}
+
+@media (min-width: 640px) {
+  .scroll-stack-card {
+    padding: 3rem;
+    border-radius: 2.5rem;
+  }
+}
+
+/* Dark mode support */
+.dark .scroll-stack-card {
+  box-shadow: 
+    0 1px 2px rgba(0, 0, 0, 0.2),
+    0 4px 12px rgba(0, 0, 0, 0.15),
+    0 16px 32px rgba(0, 0, 0, 0.1);
+}
+
+.dark .scroll-stack-card:hover {
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.25),
+    0 12px 28px rgba(0, 0, 0, 0.2),
+    0 24px 48px rgba(0, 0, 0, 0.15);
+}
+
+.scroll-stack-end {
+  width: 100%;
+  height: 1px;
+}

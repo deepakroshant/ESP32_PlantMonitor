@@ -22,7 +22,7 @@ type Props = {
   isResetPending: boolean
   deviceStatus: DeviceStatus
   statusMeta: StatusMeta
-  statusDescription: string
+  statusDescription: React.ReactNode
   readings: Readings | null
   lastUpdated: string | null
 }

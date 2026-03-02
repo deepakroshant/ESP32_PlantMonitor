@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext'
 import { fadeSlideUp, staggerContainer, transition } from '../lib/motion'
 import { PlantIcon } from '../components/icons/PlantIcon'
 import { sanitizeEmail } from '../utils/sanitize'
+import { RotatingText } from '../components/ui/rotating-text'
 
 export function LoginPage() {
   const [email, setEmail] = useState('')
@@ -73,7 +74,13 @@ export function LoginPage() {
             Smart Plant Pro
           </h1>
           <p className="mt-2 text-sm leading-relaxed text-forest-400">
-            Intelligent plant monitoring, powered by IoT
+            <RotatingText
+              words={["Intelligent", "Automated", "Smart", "Connected"]}
+              mode="fade"
+              interval={3000}
+              className="font-semibold text-primary"
+            />{" "}
+            plant monitoring, powered by IoT
           </p>
         </motion.div>
 

@@ -23,6 +23,8 @@ import { ConfirmDestructiveButton } from '../components/ConfirmDestructiveButton
 import { ThemeToggleIcon } from '../components/icons/ThemeToggleIcon'
 import { sanitizeString, sanitizeEmail, sanitizeInt, sanitizeNumber } from '../utils/sanitize'
 import { useRateLimit } from '../hooks/useRateLimit'
+import { RotatingText } from '../components/ui/rotating-text'
+import ScrollStack, { ScrollStackItem } from '../components/ui/ScrollStack'
 
 export type DashboardTab = 'dashboard' | 'settings'
 
@@ -521,13 +523,29 @@ export function DashboardPage() {
   const lastUpdated = readings?.timestamp != null && tsValid ? new Date(readings.timestamp * 1000).toLocaleTimeString() : null
   const showProTip = temp != null && !Number.isNaN(temp) && temp > 28
 
-  const statusDescription: Record<DeviceStatus, string> = {
+  const statusDescription: Record<DeviceStatus, React.ReactNode> = {
     live: `Receiving data — updated ${lastSeenLabel}`,
     delayed: `Last data ${lastSeenLabel} — device may be slow to respond`,
     offline: `Last seen ${lastSeenLabel} — device is not sending data`,
-    syncing: resetRequestedAt > 0 ? 'Device is restarting into setup mode…' : 'Waiting for sensor data…',
-    wifi_connected: 'Connected to WiFi — waiting for sensor data…',
-    no_data: 'Waiting for first reading…',
+    syncing: resetRequestedAt > 0 ? (
+      <>
+        Device is <RotatingText words={["restarting", "rebooting", "resetting"]} mode="fade" interval={2000} className="font-medium text-primary" /> into setup mode…
+      </>
+    ) : (
+      <>
+        <RotatingText words={["Waiting", "Preparing", "Initializing"]} mode="fade" interval={2000} className="font-medium text-primary" /> for sensor data…
+      </>
+    ),
+    wifi_connected: (
+      <>
+        Connected to WiFi — <RotatingText words={["waiting", "preparing", "readying"]} mode="fade" interval={2000} className="font-medium text-primary" /> for sensor data…
+      </>
+    ),
+    no_data: (
+      <>
+        <RotatingText words={["Waiting", "Preparing", "Readying"]} mode="fade" interval={2000} className="font-medium text-primary" /> for first reading…
+      </>
+    ),
   }
 
   // ── Render ──
@@ -595,8 +613,25 @@ export function DashboardPage() {
         {myDevices.length === 0 ? (
           <motion.div variants={fadeSlideUp} initial="hidden" animate="visible" className="section-card flex flex-col items-center justify-center p-14 text-center">
             <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 shadow-glow ring-1 ring-primary/10"><PlusIcon className="h-7 w-7 text-primary" /></div>
-            <p className="mb-2 font-display text-lg font-bold text-forest">No devices yet</p>
-            <p className="mb-6 text-sm text-forest-400">Add your first plant monitor to get started.</p>
+            <p className="mb-2 font-display text-lg font-bold text-forest dark:text-forest-100">
+              <RotatingText
+                words={["Ready", "Set", "Let's"]}
+                mode="slide"
+                interval={2000}
+                className="text-primary"
+              />{" "}
+              get started
+            </p>
+            <p className="mb-6 text-sm text-forest-400 dark:text-forest-500">
+              Add your first plant monitor to begin{" "}
+              <RotatingText
+                words={["monitoring", "tracking", "caring"]}
+                mode="fade"
+                interval={2500}
+                className="font-medium text-primary"
+              />{" "}
+              your plants.
+            </p>
             <Link to="/claim" className="btn-primary">Add a device</Link>
           </motion.div>
         ) : (
@@ -816,32 +851,99 @@ export function DashboardPage() {
                     <button type="submit" className="btn-primary">Add profile</button>
                   </form>
                   {Object.keys(profiles).length === 0 ? (
-                    <p className="text-xs text-forest/35">No plant profiles yet. Add one above.</p>
+                    <p className="text-xs text-forest/35 dark:text-forest-500">No plant profiles yet. Add one above.</p>
                   ) : (
-                    <ul className="space-y-2">
-                      {Object.entries(profiles).sort(([, a], [, b]) => (a.createdAt ?? 0) - (b.createdAt ?? 0)).map(([id, p]) => (
-                        <li key={id} className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-forest/8 bg-surface/60 px-4 py-3 transition-colors hover:bg-white/80 dark:border-slate-600/50 dark:bg-slate-700/50 dark:hover:bg-slate-600/60">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-forest dark:text-slate-100">{p.name}</span>
-                            {p.type && p.type !== '—' && <span className="rounded-md bg-sage-100 px-2 py-0.5 text-xs text-forest-400 dark:bg-slate-600 dark:text-slate-400">{p.type}</span>}
-                            {linkedProfileId === id && <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary dark:bg-primary/30 dark:text-primary-300">Linked</span>}
-                          </div>
-                          <div className="ml-auto flex items-center gap-1">
-                            {linkedProfileId !== id && selectedMac && <button type="button" onClick={() => linkProfileToDevice(id)} className="rounded-xl bg-primary/12 px-2.5 py-1 text-xs font-medium text-primary transition hover:bg-primary/22 dark:bg-primary/25 dark:hover:bg-primary/35">Use for device</button>}
-                            <button type="button" onClick={() => openEditPlant(id)} className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-forest/40 transition hover:bg-sage-100 hover:text-forest dark:text-slate-500 dark:hover:bg-slate-600 dark:hover:text-slate-200" aria-label="Edit profile"><PencilIcon className="h-4 w-4" /></button>
-                            <ConfirmDestructiveButton
-                              label="Remove"
-                              title="Remove plant profile?"
-                              message={`Delete "${p.name}"? This cannot be undone.`}
-                              confirmLabel="Remove"
-                              onConfirm={() => deleteProfile(id)}
-                              variant="danger"
-                              className="rounded-full px-3 py-2 text-xs text-terracotta/70 transition hover:bg-red-50 hover:text-terracotta dark:text-red-400 dark:hover:bg-red-900/50"
-                            />
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
+                    <div className="h-[500px] overflow-hidden rounded-2xl">
+                      <ScrollStack
+                        className="h-full"
+                        itemDistance={80}
+                        itemScale={0.03}
+                        itemStackDistance={25}
+                        stackPosition="20%"
+                        scaleEndPosition="10%"
+                        baseScale={0.9}
+                        rotationAmount={1.5}
+                        blurAmount={1}
+                        useWindowScroll={false}
+                      >
+                        {Object.entries(profiles).sort(([, a], [, b]) => (b.createdAt ?? 0) - (a.createdAt ?? 0)).map(([id, p]) => (
+                          <ScrollStackItem
+                            key={id}
+                            itemClassName="bg-white dark:bg-forest-800/90 border-2 border-forest/10 dark:border-forest-700 shadow-lg"
+                          >
+                            <div className="flex flex-col gap-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <h3 className="font-display text-xl font-bold text-forest dark:text-forest-100">{p.name}</h3>
+                                    {linkedProfileId === id && (
+                                      <span className="rounded-full bg-primary/15 px-2.5 py-1 text-xs font-semibold text-primary dark:bg-primary/30 dark:text-primary-300">
+                                        Linked
+                                      </span>
+                                    )}
+                                  </div>
+                                  {p.type && p.type !== '—' && (
+                                    <span className="inline-block rounded-lg bg-sage-100 px-3 py-1 text-sm font-medium text-forest-600 dark:bg-slate-700 dark:text-slate-300">
+                                      {p.type}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {linkedProfileId !== id && selectedMac && (
+                                    <button
+                                      type="button"
+                                      onClick={() => linkProfileToDevice(id)}
+                                      className="rounded-xl bg-primary/12 px-3 py-1.5 text-xs font-semibold text-primary transition hover:bg-primary/22 dark:bg-primary/25 dark:hover:bg-primary/35"
+                                    >
+                                      Use
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditPlant(id)}
+                                    className="flex h-9 w-9 items-center justify-center rounded-full text-forest/40 transition hover:bg-sage-100 hover:text-forest dark:text-slate-500 dark:hover:bg-slate-600 dark:hover:text-slate-200"
+                                    aria-label="Edit profile"
+                                  >
+                                    <PencilIcon className="h-4 w-4" />
+                                  </button>
+                                  <ConfirmDestructiveButton
+                                    label="Remove"
+                                    title="Remove plant profile?"
+                                    message={`Delete "${p.name}"? This cannot be undone.`}
+                                    confirmLabel="Remove"
+                                    onConfirm={() => deleteProfile(id)}
+                                    variant="danger"
+                                    className="flex h-9 items-center rounded-full px-3 text-xs text-terracotta/70 transition hover:bg-red-50 hover:text-terracotta dark:text-red-400 dark:hover:bg-red-900/50"
+                                  />
+                                </div>
+                              </div>
+                              {(p.soilMin != null || p.tempMin != null || p.humidityMin != null) && (
+                                <div className="grid grid-cols-3 gap-3 pt-3 border-t border-forest/10 dark:border-forest-700">
+                                  {p.soilMin != null && p.soilMax != null && (
+                                    <div>
+                                      <p className="text-[10px] font-semibold uppercase tracking-wider text-forest/40 dark:text-forest-500 mb-1">Soil</p>
+                                      <p className="text-sm font-mono font-semibold text-forest dark:text-forest-100">{p.soilMin}–{p.soilMax}</p>
+                                    </div>
+                                  )}
+                                  {p.tempMin != null && p.tempMax != null && (
+                                    <div>
+                                      <p className="text-[10px] font-semibold uppercase tracking-wider text-forest/40 dark:text-forest-500 mb-1">Temp</p>
+                                      <p className="text-sm font-mono font-semibold text-forest dark:text-forest-100">{p.tempMin}–{p.tempMax}°C</p>
+                                    </div>
+                                  )}
+                                  {p.humidityMin != null && p.humidityMax != null && (
+                                    <div>
+                                      <p className="text-[10px] font-semibold uppercase tracking-wider text-forest/40 dark:text-forest-500 mb-1">Humidity</p>
+                                      <p className="text-sm font-mono font-semibold text-forest dark:text-forest-100">{p.humidityMin}–{p.humidityMax}%</p>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </ScrollStackItem>
+                        ))}
+                      </ScrollStack>
+                    </div>
                   )}
                 </CollapsibleSection>
 
