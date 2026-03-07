@@ -488,7 +488,10 @@ export function DashboardPage() {
   const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000))
   useEffect(() => { const id = setInterval(() => setNowSec(Math.floor(Date.now() / 1000)), 2000); return () => clearInterval(id) }, [])
 
-  const deviceStatus = getDeviceStatus(readings, nowSec, resetRequestedAt)
+  const deviceStatus = getDeviceStatus(readings, nowSec, resetRequestedAt, {
+    lastSyncAt: diagnostics?.lastSyncAt ?? null,
+    lastAlertTs: lastAlert?.timestamp ?? null,
+  })
   const meta = STATUS_META[deviceStatus]
 
   useEffect(() => {
@@ -516,11 +519,15 @@ export function DashboardPage() {
   const dataUntrusted = deviceStatus === 'offline' || deviceStatus === 'syncing' || deviceStatus === 'wifi_connected' || deviceStatus === 'no_data'
   const isDelayed = deviceStatus === 'delayed'
   const healthOk = (readings?.health ?? '').toLowerCase() === 'ok'
-  const lastSeenSec = readings?.timestamp ?? 0
+  const readingsTs = readings?.timestamp ?? 0
+  const readingsTsValid = readingsTs > 1577836800
+  const diagTs = diagnostics?.lastSyncAt ?? 0
+  const diagTsValid = diagTs > 1577836800
+  const lastSeenSec = readingsTsValid ? readingsTs : (diagTsValid ? diagTs : 0)
   const tsValid = lastSeenSec > 1577836800
   const secondsAgo = tsValid ? nowSec - lastSeenSec : Infinity
   const lastSeenLabel = formatSecondsAgo(secondsAgo, tsValid)
-  const lastUpdated = readings?.timestamp != null && tsValid ? new Date(readings.timestamp * 1000).toLocaleTimeString() : null
+  const lastUpdated = tsValid ? new Date(lastSeenSec * 1000).toLocaleTimeString() : null
   const showProTip = temp != null && !Number.isNaN(temp) && temp > 28
 
   const statusDescription: Record<DeviceStatus, React.ReactNode> = {
