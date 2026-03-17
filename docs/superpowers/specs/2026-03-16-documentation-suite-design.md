@@ -23,7 +23,7 @@ GitHub front door. Explains what this is, shows it off, links deeper.
 4. **Architecture Diagram** — ASCII: `[ESP32 + Sensors] → WiFi → [Firebase RTDB] ← [React Dashboard]`
 5. **Tech Stack** — Table: Firmware (ESP32/Arduino, FreeRTOS, PlatformIO), Backend (Firebase Auth + RTDB), Frontend (React 19, Vite, Tailwind, Recharts, Framer Motion), Deployment (Vercel)
 6. **Quick Start** — Brief steps (flash, join AP, configure WiFi, open dashboard). Links to User Manual for details.
-7. **Hardware** — Supported boards table + sensor list. Links to User Manual wiring section.
+7. **Hardware** — Supported boards table (ESP32-S3 Zero, ESP32-D) + sensor list (BME280/BMP280, capacitive soil, LDR, relay). Links to User Manual wiring section.
 8. **Project Structure** — File tree (key files only)
 9. **Documentation Links** — Links to User Manual and Developer Guide
 
@@ -36,7 +36,7 @@ End-to-end guide from assembling hardware to daily dashboard usage.
 ### Sections
 
 1. **Introduction** — What you'll need (hardware list, computer/phone, home WiFi)
-2. **Hardware Assembly** — Wiring tables per board (ESP32-S3 Zero, ESP32-D, QT Py), sensor connections, relay wiring, safety notes (active-low relay)
+2. **Hardware Assembly** — Wiring tables per board (ESP32-S3 Zero, ESP32-D), sensor connections (note: BME280 provides humidity, BMP280 does not — mention how to identify which you have), relay wiring, safety notes (active-low relay)
 3. **Flashing Firmware** — Install PlatformIO, clone repo, select board environment, upload, monitor serial output
 4. **WiFi Setup (First Boot)** — Join SmartPlantPro AP, open 192.168.4.1, enter WiFi creds, optional Firebase config (PIN gate), what to expect on success
 5. **Dashboard Setup** — Create account (sign up), claim device (enter MAC or discover), add name/room
@@ -47,6 +47,7 @@ End-to-end guide from assembling hardware to daily dashboard usage.
 10. **Multi-Device** — Adding devices, switching, overview page
 11. **Troubleshooting** — Device offline, WiFi reset, sensor not detected, pump not responding, SSL failures
 12. **Changing WiFi** — Reset from dashboard vs physical, what gets preserved
+13. **Security & Credentials** — How credentials are stored (NVS), portal PIN gate, cross-reference to `SECURITY.md`
 
 ---
 
@@ -66,14 +67,20 @@ Get a classmate productive in the codebase fast.
    - Add a new dashboard card
    - Add a new control command (app → device)
    - Change sync interval
-   - Add a new board/pinout
+   - Add a new board/pinout (note: multi-board `#ifdef` infrastructure does not yet exist — currently hardcoded per build flag)
    - Modify the WiFi portal
    - Add a new page/route
 7. **Data Flow Diagrams** — Sensor → Firebase, App → Device control, Device claiming
-8. **Concurrency & Safety** — Two mutexes, why they exist, what breaks without them, timeouts
-9. **Deployment** — Vercel frontend, env vars, OTA firmware
+8. **Concurrency & Safety** — Two mutexes (`gStateMutex` for shared sensor state, `gFirebaseMutex` for Firebase client), why they exist, what breaks without them, timeout values
+9. **Deployment** — Vercel frontend deploy, env vars. Note: OTA is stubbed in code but non-functional (single-app partition, no OTA slot). Document what's needed to re-enable.
 10. **Gotchas & Pitfalls** — Active-low relay, fake BME280, SSL auto-reset, stale flags, guest network blocking, NVS keys, rate limiting
-11. **Future Work / Known TODOs** — Link to PLAN.md, improvement areas
+11. **Future Work / Known TODOs** — Link to PLAN.md, improvement areas. Cross-reference `SECURITY.md` for credential handling guidelines.
+
+---
+
+## Notes on Existing Documentation
+
+The repo contains `PROJECT_REPORT.md`, `TEST_AND_OVERVIEW.md`, and `PROJECT_OVERVIEW_RESUME.md` at the root. These are superseded by this documentation suite for their respective audiences but may be retained as historical artifacts. The new README will not link to them.
 
 ---
 
