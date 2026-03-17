@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { get, query, ref, orderByKey, startAt, endAt } from 'firebase/database'
+import { get, query, ref, orderByKey, limitToLast } from 'firebase/database'
 import { fromZonedTime, toZonedTime } from 'date-fns-tz'
 import { format, subDays, startOfDay } from 'date-fns'
 import { firebaseDb } from '../../lib/firebase'
@@ -42,17 +42,18 @@ export default function ExportModal({ mac, onClose }: Props) {
       const startEpoch = Math.floor(startUTC.getTime() / 1000)
       const endEpoch   = Math.floor(endUTC.getTime() / 1000)
 
+      // Calculate a safe fetch limit: 12 snapshots/hour × hours + buffer.
+      // Using limitToLast + JS filtering avoids Firebase's unreliable
+      // startAt/endAt behaviour on numerically-sorted integer keys.
+      const durationHours = Math.ceil((endEpoch - startEpoch) / 3600)
+      const fetchLimit = Math.min(durationHours * 12 + 100, 12000)
+
       const histRef = ref(firebaseDb, `devices/${mac}/history`)
-      const q = query(
-        histRef,
-        orderByKey(),
-        startAt(String(startEpoch)),
-        endAt(String(endEpoch))
-      )
+      const q = query(histRef, orderByKey(), limitToLast(fetchLimit))
       const snapshot = await get(q)
 
       if (!snapshot.exists()) {
-        setError('No data found for this period. Try a wider date range.')
+        setError('No history data found for this device yet. The device records a snapshot every ~5 minutes while online.')
         setLoading(false)
         return
       }
@@ -60,6 +61,7 @@ export default function ExportModal({ mac, onClose }: Props) {
       const rows: HistoryRow[] = []
       snapshot.forEach(child => {
         const epoch = parseInt(child.key ?? '0', 10)
+        if (epoch < startEpoch || epoch > endEpoch) return
         const v = child.val()
         rows.push({
           epoch,
@@ -71,6 +73,12 @@ export default function ExportModal({ mac, onClose }: Props) {
           pu: v.pu ?? 0,
         })
       })
+
+      if (rows.length === 0) {
+        setError('No data found for this date range. Try a wider range.')
+        setLoading(false)
+        return
+      }
 
       rows.sort((a, b) => a.epoch - b.epoch)
 
