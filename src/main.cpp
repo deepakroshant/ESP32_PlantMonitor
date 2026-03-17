@@ -20,13 +20,13 @@
 #include <Firebase_ESP_Client.h>
 
 // -----------------------------------------------------------------------------
-// Hardware configuration
+// Hardware configuration — ESP32-D (DevKit) pinout
 // -----------------------------------------------------------------------------
-static constexpr uint8_t I2C_SDA_PIN      = 33;
-static constexpr uint8_t I2C_SCL_PIN      = 32;
+static constexpr uint8_t I2C_SDA_PIN      = 33;  // I2C data
+static constexpr uint8_t I2C_SCL_PIN      = 32;  // I2C clock
 // BME280/BMP280 address detected at runtime (0x76 or 0x77)
 static constexpr uint8_t SOIL_SENSOR_PIN  = 34;  // ADC
-static constexpr uint8_t LIGHT_SENSOR_PIN = 35;  // Digital
+static constexpr uint8_t LIGHT_SENSOR_PIN = 35;  // Digital input
 static constexpr uint8_t RELAY_PIN        = 25;  // Active LOW: LOW = pump ON
 
 // -----------------------------------------------------------------------------
@@ -185,9 +185,16 @@ void setup() {
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
 
-  // ── Portal branding: Smart Plant Pro theme ──
-  wm.setTitle("Smart Plant Pro");
-  wm.setCustomHeadElement(
+  // Device MAC for AP SSID and portal — available from boot
+  String apMac = WiFi.macAddress();
+  String macSuffix = apMac;
+  macSuffix.replace(":", "");
+  macSuffix = macSuffix.substring(6);  // Last 6 hex chars (e.g. BD36CC)
+  String apSsid = "SmartPlantPro_" + macSuffix;
+  Serial.printf("[AP] When in setup mode: SSID=%s  MAC=%s\n", apSsid.c_str(), apMac.c_str());
+
+  // ── Portal branding: Smart Plant Pro theme (includes device MAC) ──
+  String customHead = String(
     "<style>"
     // Background & typography
     "body{background:#f4f9f0 !important;font-family:'Segoe UI',system-ui,-apple-system,sans-serif !important;color:#1b3a2d}"
@@ -263,8 +270,11 @@ void setup() {
     "<div style='font-size:1.5rem'>&#127793;</div>"
     "<div style='font-weight:700;font-size:1.1rem;letter-spacing:.02em'>Smart Plant Pro</div>"
     "<div style='font-size:.78rem;opacity:.85;margin-top:2px'>WiFi &amp; Device Setup</div>"
-    "</div>"
   );
+  customHead += "<div style='font-size:.7rem;opacity:.75;margin-top:6px;font-family:monospace;letter-spacing:.05em'>Device: ";
+  customHead += apMac;
+  customHead += "</div></div>";
+  wm.setCustomHeadElement(customHead.c_str());
 
   // Firebase parameters — hidden behind a 4-digit PIN so normal users only see WiFi fields.
   // The PIN gate is pure HTML/JS injected as a custom WiFiManager parameter.
@@ -317,32 +327,34 @@ void setup() {
   wm.setMinimumSignalQuality(10);  // Accept weaker signals during scan for faster UI
 
   // Captive portal: redirect to /start (landing) for fast response, then user chooses Configure.
-  const char* LANDING_HTML =
+  String landingHtml = String(
     "<!DOCTYPE html><html><head><meta charset=utf-8><meta name=viewport content=\"width=device-width\">"
     "<title>Smart Plant Pro</title><style>"
     "body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;"
     "font-family:system-ui,sans-serif;background:linear-gradient(180deg,#f4f9f0 0%,#e8f5e3 100%);}"
     ".card{background:#fff;border-radius:20px;padding:32px;box-shadow:0 4px 20px rgba(0,0,0,.08);text-align:center;max-width:320px;}"
-    "h1{font-size:1.5rem;color:#1b3a2d;margin:0 0 8px;} .sub{color:#5a7a6a;font-size:.9rem;margin-bottom:28px;}"
+    "h1{font-size:1.5rem;color:#1b3a2d;margin:0 0 8px;} .sub{color:#5a7a6a;font-size:.9rem;margin-bottom:8px;}"
+    ".mac{font-size:.75rem;font-family:monospace;color:#5a7a6a;margin-bottom:20px;}"
     "a{display:block;background:#3da56b;color:#fff!important;text-decoration:none;padding:14px 24px;border-radius:12px;"
     "font-weight:600;margin:8px 0;transition:background .2s;} a:hover{background:#2e8a56;}"
     "a.second{background:#e8f5e3;color:#2e6b4a!important;} a.second:hover{background:#d4edd8;}"
     "</style></head><body><div class=card>"
     "<div style=font-size:2.5rem>🌱</div><h1>Smart Plant Pro</h1><p class=sub>Device setup</p>"
+    "<p class=mac>Device: ") + apMac + "</p>"
     "<a href=/wifi>Configure WiFi</a>"
     "<a href=/info class=second>Device info</a>"
     "<a href=/restart class=second>Reset &amp; reconnect</a>"
     "</div></body></html>";
 
-  wm.setWebServerCallback([LANDING_HTML]() {
+  wm.setWebServerCallback([landingHtml]() {
     // Redirect connectivity checks → /start (small page, loads fast)
     auto redirectStart = []() {
       wm.server->sendHeader("Location", "http://192.168.4.1/start");
       wm.server->send(302, "text/plain", "");
     };
-    wm.server->on("/start", HTTP_GET, [LANDING_HTML]() {
+    wm.server->on("/start", HTTP_GET, [landingHtml]() {
       wm.server->sendHeader("Cache-Control", "no-cache");
-      wm.server->send(200, "text/html", LANDING_HTML);
+      wm.server->send(200, "text/html", landingHtml.c_str());
     });
     wm.server->on("/generate_204", HTTP_GET, redirectStart);
     wm.server->on("/gen_204", HTTP_GET, redirectStart);
@@ -366,7 +378,7 @@ void setup() {
     if (p.begin(NVS_NAMESPACE, false)) { p.remove("force_portal"); p.end(); }
   }
 
-  if (!wm.autoConnect("SmartPlantPro")) {
+  if (!wm.autoConnect(apSsid.c_str())) {
     Serial.println("WiFiManager failed to connect, restarting...");
     delay(3000);
     ESP.restart();

@@ -5,16 +5,34 @@ import type { Readings, DeviceStatus } from '../types'
 // window are "last-gasp" data from the pre-reset device — ignore them.
 const RESET_GRACE_SEC = 30
 
+/** If we have alerts/diagnostics but no readings, treat as "recent" for up to 2 min */
+const PARTIAL_DATA_RECENT_SEC = 120
+
+export type DeviceStatusOptions = {
+  /** Fallback when readings.timestamp is invalid (e.g. NTP not synced on ESP32) */
+  lastSyncAt?: number | null
+  /** When readings is null but we receive alerts, show syncing instead of connecting */
+  lastAlertTs?: number | null
+}
+
 export function getDeviceStatus(
   readings: Readings | null,
   nowSec: number,
   resetRequestedAt: number,
+  options?: DeviceStatusOptions,
 ): DeviceStatus {
   if (!readings && resetRequestedAt > 0) return 'syncing'
-  if (!readings) return 'no_data'
+  if (!readings) {
+    // We're getting alerts but no readings — device is partially syncing
+    const alertTs = options?.lastAlertTs ?? 0
+    if (alertTs > 1577836800 && nowSec - alertTs <= PARTIAL_DATA_RECENT_SEC) return 'syncing'
+    return 'no_data'
+  }
 
   const ts = readings.timestamp ?? 0
   const tsValid = ts > 1577836800
+  const lastSyncAt = options?.lastSyncAt ?? 0
+  const hasValidLastSync = lastSyncAt > 1577836800
 
   if (resetRequestedAt > 0) {
     // Readings must be well after the reset request to be considered genuine
@@ -25,9 +43,11 @@ export function getDeviceStatus(
     if (!hasSensors) return 'wifi_connected'
   }
 
-  if (!tsValid) return 'no_data'
+  // Use lastSyncAt as fallback when timestamp is invalid (e.g. ESP32 NTP not synced yet)
+  const effectiveTs = tsValid ? ts : (hasValidLastSync ? lastSyncAt : 0)
+  if (effectiveTs <= 0) return 'no_data'
 
-  const secondsAgo = nowSec - ts
+  const secondsAgo = nowSec - effectiveTs
   if (secondsAgo <= 15) return 'live'
   if (secondsAgo <= 35) return 'delayed'
   return 'offline'

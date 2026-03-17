@@ -30,7 +30,7 @@ function formatWateredAgo(epoch: number): string {
 type DeviceData = {
   readings: Readings | null
   lastWateredEpoch: number | null
-  lastAlert: { message: string } | null
+  lastAlert: { message: string; timestamp?: number } | null
 }
 
 export function OverviewPage() {
@@ -111,7 +111,10 @@ export function OverviewPage() {
               ...prev,
               [mac]: {
                 ...prev[mac],
-                lastAlert: { message: typeof o.message === 'string' ? o.message : '—' },
+                lastAlert: {
+                  message: typeof o.message === 'string' ? o.message : '—',
+                  timestamp: typeof o.timestamp === 'number' ? o.timestamp : undefined,
+                },
               },
             }))
           } else {
@@ -208,7 +211,8 @@ export function OverviewPage() {
                 const status = getDeviceStatus(
                   data.readings,
                   Math.floor(Date.now() / 1000),
-                  resetRequestedAt
+                  resetRequestedAt,
+                  { lastAlertTs: data.lastAlert?.timestamp ?? null }
                 ) as DeviceStatus
                 const meta = STATUS_META[status]
                 const soil = data.readings?.soilRaw != null ? String(data.readings.soilRaw) : '—'
