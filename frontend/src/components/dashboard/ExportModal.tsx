@@ -34,10 +34,10 @@ export default function ExportModal({ mac, onClose }: Props) {
     setError(null)
 
     try {
-      const startLocal = new Date(`${startInput}:00`)
-      const endLocal   = new Date(`${endInput}:00`)
-      const startUTC   = fromZonedTime(startLocal, TZ)
-      const endUTC     = fromZonedTime(endLocal, TZ)
+      // Pass strings directly to fromZonedTime — avoids browser timezone
+      // ambiguity that occurs when passing Date objects.
+      const startUTC = fromZonedTime(`${startInput}:00`, TZ)
+      const endUTC   = fromZonedTime(`${endInput}:59`, TZ) // inclusive of last minute
 
       const startEpoch = Math.floor(startUTC.getTime() / 1000)
       const endEpoch   = Math.floor(endUTC.getTime() / 1000)
