@@ -509,9 +509,11 @@ void setup() {
     Serial.println("Firebase is ready.");
   }
 
-  // Shared state mutex
-  gStateMutex = xSemaphoreCreateMutex();
-  gFirebaseMutex = xSemaphoreCreateMutex();
+  // Binary semaphores instead of mutexes: avoids FreeRTOS priority-inheritance
+  // assertion (vTaskPriorityDisinheritAfterTimeout) that fires on ESP32-S3 SMP
+  // when a cross-core timeout occurs while the mutex holder's priority was raised.
+  gStateMutex    = xSemaphoreCreateBinary(); xSemaphoreGive(gStateMutex);
+  gFirebaseMutex = xSemaphoreCreateBinary(); xSemaphoreGive(gFirebaseMutex);
 
   Serial.println("Firebase polling mode (no stream).");
 
