@@ -8,32 +8,57 @@
  */
 
 #include <Arduino.h>
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
+
+#ifdef HARDWARE_TEST_MODE
+#include "hardware_test_mode.h"
+#endif
+
+#ifndef HARDWARE_TEST_MODE
 #include <WiFi.h>
 #include <esp_wifi.h>
-#include <Wire.h>
 #include <WiFiManager.h>
 #include <ArduinoOTA.h>
 #include <Preferences.h>
-#include <Adafruit_Sensor.h>
 #include <Adafruit_BMP280.h>
-#include <Adafruit_BME280.h>
 #include <Firebase_ESP_Client.h>
+#endif
 
 // -----------------------------------------------------------------------------
-// Hardware configuration — ESP32-D (DevKit) pinout
+// Hardware configuration — board-specific pinout
 // -----------------------------------------------------------------------------
-static constexpr uint8_t I2C_SDA_PIN      = 33;  // I2C data
-static constexpr uint8_t I2C_SCL_PIN      = 32;  // I2C clock
-// BME280/BMP280 address detected at runtime (0x76 or 0x77)
-static constexpr uint8_t SOIL_SENSOR_PIN  = 34;  // ADC
-static constexpr uint8_t LIGHT_SENSOR_PIN = 35;  // Digital input
-static constexpr uint8_t RELAY_PIN        = 25;  // Active LOW: LOW = pump ON
+#ifdef BOARD_ESP32_S3_ZERO
+// ESP32-S3-Zero (Waveshare): GP 1–10 in use; Soil=11, Light=12, Relay=10
+// BME280 on I2C 8,9; pump relay on 10
+static constexpr uint8_t I2C_SDA_PIN      = 8;
+static constexpr uint8_t I2C_SCL_PIN      = 9;
+static constexpr uint8_t SOIL_SENSOR_PIN  = 11;  // ADC2, higher = drier
+static constexpr uint8_t LIGHT_SENSOR_PIN = 12;  // Digital, LOW = bright
+static constexpr uint8_t RELAY_PIN        = 10;  // Active LOW: LOW = pump ON
+#elif defined(BOARD_QTPY_ESP32S3)
+// Adafruit QT Py ESP32-S3 N4R2: I2C SDA=7 SCL=6; Soil=A0, Light=A2, Relay=10
+static constexpr uint8_t I2C_SDA_PIN      = 7;
+static constexpr uint8_t I2C_SCL_PIN      = 6;
+static constexpr uint8_t SOIL_SENSOR_PIN  = 18;  // A0, ADC2
+static constexpr uint8_t LIGHT_SENSOR_PIN = 9;   // A2, digital-capable
+static constexpr uint8_t RELAY_PIN        = 10;  // Free GPIO for relay
+#else
+// ESP32-D (DevKit) default
+static constexpr uint8_t I2C_SDA_PIN      = 33;
+static constexpr uint8_t I2C_SCL_PIN      = 32;
+static constexpr uint8_t SOIL_SENSOR_PIN  = 34;
+static constexpr uint8_t LIGHT_SENSOR_PIN = 35;
+static constexpr uint8_t RELAY_PIN        = 25;
+#endif
 
 // -----------------------------------------------------------------------------
 // WiFi: from WiFiManager (first boot = AP "SmartPlantPro", then from flash).
 // Firebase: from portal (NVS) if user filled the form at 192.168.4.1, else these defaults.
 // Defaults come from firebase_defaults.h (empty) or optional secrets.h (gitignored).
 // -----------------------------------------------------------------------------
+#ifndef HARDWARE_TEST_MODE
 #include "firebase_defaults.h"
 
 #define API_KEY FIREBASE_API_KEY
@@ -74,9 +99,11 @@ FirebaseAuth fbAuth;
 FirebaseConfig fbConfig;
 
 String deviceId;  // WiFi.macAddress()
+#endif  // !HARDWARE_TEST_MODE
 
+#ifndef HARDWARE_TEST_MODE
 // -----------------------------------------------------------------------------
-// Sensor state shared between tasks
+// Sensor state shared between tasks (normal mode only)
 // -----------------------------------------------------------------------------
 struct SensorState {
   float    temperatureC;
@@ -163,14 +190,25 @@ static void clearBadWiFiAndRestart(const char* reason) {
   delay(2000);
   ESP.restart();
 }
+#endif  // !HARDWARE_TEST_MODE
 
 // -----------------------------------------------------------------------------
 // Setup
 // -----------------------------------------------------------------------------
 void setup() {
+  // ESP32-S3 USB CDC: allow host to enumerate before Serial (fixes blank monitor)
+  delay(3000);
   Serial.begin(115200);
   delay(500);
+  Serial.println("Smart Plant Pro boot...");
+  Serial.flush();
 
+#ifdef HARDWARE_TEST_MODE
+  hardwareTestSetup();
+  return;
+#endif
+
+#ifndef HARDWARE_TEST_MODE
   // Safety: pump OFF first
   pinMode(RELAY_PIN, OUTPUT);
   digitalWrite(RELAY_PIN, HIGH);
@@ -416,12 +454,14 @@ void setup() {
   Serial.print("WiFi connected, IP: ");
   Serial.println(WiFi.localIP());
 
-  // Sync real-time clock via NTP so timestamps are Unix epoch, not uptime
-  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  // Sync real-time clock via NTP so timestamps are Unix epoch, not uptime.
+  // Use multiple servers — some networks (mobile hotspots, guest WiFi) block pool.ntp.org
+  // but allow time.google.com or time.cloudflare.com.
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov", "time.google.com");
   Serial.print("Waiting for NTP");
   time_t now = time(nullptr);
   int ntpRetries = 0;
-  const int NTP_MAX_RETRIES = 50;  // ~10 sec — hotspots need more time to route traffic
+  const int NTP_MAX_RETRIES = 75;  // ~15 sec — slow or restrictive networks need more time
   while (now < 1000000000L && ntpRetries < NTP_MAX_RETRIES) {
     delay(200);
     now = time(nullptr);
@@ -432,8 +472,10 @@ void setup() {
   if (now >= 1000000000L) {
     Serial.printf("NTP synced: %ld\n", (long)now);
   } else {
-    Serial.println("NTP failed — clearing WiFi and restarting.");
-    clearBadWiFiAndRestart("ERROR: This network blocks internet access. Use a standard home/office WiFi.");
+    // Don't clear WiFi — many networks block NTP (UDP 123) but allow HTTPS (Firebase).
+    // Device will work with wrong timestamps; dashboard uses lastSyncAt fallback.
+    Serial.println("NTP failed — continuing without sync. Timestamps may be wrong until NTP works.");
+    Serial.println("  (Tip: Use home/office WiFi if dashboard shows 'Connecting'.)");
   }
 
   deviceId = WiFi.macAddress(); // e.g. "24:6F:28:AA:BB:CC"
@@ -479,13 +521,21 @@ void setup() {
   xTaskCreatePinnedToCore(taskReadSensors,  "taskReadSensors",  4096, nullptr, 1, nullptr, 0);
   xTaskCreatePinnedToCore(taskFirebaseSync, "taskFirebaseSync", 8192, nullptr, 1, nullptr, 1);
   xTaskCreatePinnedToCore(taskPumpControl,  "taskPumpControl",  4096, nullptr, 1, nullptr, 1);
+#endif  // !HARDWARE_TEST_MODE
 }
 
 void loop() {
+#ifdef HARDWARE_TEST_MODE
+  hardwareTestLoop();
+  return;
+#endif
+#ifndef HARDWARE_TEST_MODE
   ArduinoOTA.handle();
   vTaskDelay(pdMS_TO_TICKS(100));
+#endif
 }
 
+#ifndef HARDWARE_TEST_MODE
 // -----------------------------------------------------------------------------
 // Firebase NVS: load and apply to fbConfig/fbAuth; clear on re-provision
 // -----------------------------------------------------------------------------
@@ -865,6 +915,7 @@ void taskFirebaseSync(void *pv) {
         if (!isnan(s.humidity))     hj.set("h", s.humidity);
         hj.set("s", s.soilRaw);
         hj.set("l", s.lightBright ? 1 : 0);
+        hj.set("pu", s.pumpRunning ? 1 : 0);
         Firebase.RTDB.setJSON(&fbClient, histPath.c_str(), &hj);
       }
 
@@ -1144,5 +1195,6 @@ void taskPumpControl(void *pv) {
     }
   }
 }
+#endif  // !HARDWARE_TEST_MODE
 
 // (Stream callbacks removed — using polling to avoid FreeRTOS mutex crash)
