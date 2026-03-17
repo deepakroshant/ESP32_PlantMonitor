@@ -906,9 +906,9 @@ void taskFirebaseSync(void *pv) {
       diagJson.set("wifiRSSI", WiFi.RSSI());
       Firebase.RTDB.updateNode(&fbClient, diagPath.c_str(), &diagJson);
 
-      // History: push a compact snapshot every ~5 min (60 cycles × 5 s)
+      // History: push a compact snapshot every ~1 min (12 cycles × 5 s)
       static int histCycles = 0;
-      if (++histCycles >= 60) {
+      if (++histCycles >= 12) {
         histCycles = 0;
         String histPath = "devices/" + deviceId + "/history/" + String((int)time(nullptr));
         FirebaseJson hj;
